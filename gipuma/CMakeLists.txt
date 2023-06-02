@@ -59,6 +59,7 @@ cuda_add_executable(
     main.h
     gipuma.cu
     main.cpp
+    samplePoints.h
     )
 
 # For linking ...

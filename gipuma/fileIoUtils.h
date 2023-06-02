@@ -174,10 +174,18 @@ static void readCalibFileDaisy(const string calib_filename, Mat_<float> &P){
     myfile.close();
 }
 
-static void writeImageToFile(const char* outputFolder,const char* name,const Mat &img){
+static void writeImageToFile(const char* outputFolder, const char* name, const Mat &img) {
     char outputPath[256];
-    sprintf(outputPath, "%s/%s.png", outputFolder,name);
-    imwrite(outputPath,img);
+    if (mkdir(outputFolder, 0777) == -1) {
+        if (errno == EEXIST) {
+        // alredy exists
+        } else {
+            throw std::runtime_error(strerror(errno));
+        }
+    }
+
+    sprintf(outputPath, "%s/%s", outputFolder, name);
+    imwrite(outputPath, img);
 }
 
 static void writeParametersToFile(char* resultsFile, InputFiles inputFiles, AlgorithmParameters &algParameters, GTcheckParameters &gtParameters, uint32_t numPixels){
@@ -472,4 +480,17 @@ static int readPfm( const char *filename,
     fclose(inimage);
     return 0;
 
+}
+
+
+Mat_<Vec3b> readImage(const char* inputFolder, string name){
+    const char* fileName = name.c_str();
+    char inputPath[256];
+    sprintf(inputPath, "%s/%s", inputFolder, fileName);
+
+    cout<< endl<< endl << "name" << name << endl<< endl;
+    cout << "inputPath" << inputPath << endl;
+    Mat_<Vec3b> img = imread(inputPath, IMREAD_COLOR );
+    cout << "img" << img.rows;
+    return img;
 }

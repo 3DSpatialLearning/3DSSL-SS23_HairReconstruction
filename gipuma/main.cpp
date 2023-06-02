@@ -40,6 +40,7 @@
 #include "mathUtils.h"
 #include "displayUtils.h"
 #include "groundTruthUtils.h"
+#include "samplePoints.h"
 
 
 // file format from https://www.cs.cornell.edu/~snavely/bundler/bundler-v0.4-manual.html#S6
@@ -215,6 +216,8 @@ static int getParametersFromCommandLine ( int argc,
     const char* max_views_opt = "--max_views=";
     const char* pmvs_folder_opt = "--pmvs_folder";
     const char* camera_idx_opt = "--camera_idx=";
+    const char* k_opt = "-k=";
+    const char* rk_opt = "-rk=";
 
     //read in arguments
     for ( int i = 1; i < argc; i++ ) {
@@ -397,6 +400,12 @@ static int getParametersFromCommandLine ( int argc,
             inputFiles.bounding_folder = argv[++i];
         else if ( strncmp ( argv[i], camera_idx_opt, strlen( camera_idx_opt) ) == 0 ){
             sscanf ( argv[i] + strlen ( camera_idx_opt ), "%d", &camera_idx);
+        }
+        else if ( strncmp ( argv[i], k_opt, strlen( k_opt) ) == 0 ) {
+            sscanf ( argv[i] + strlen ( k_opt ), "%d", &algParams.k);
+        }
+        else if ( strncmp ( argv[i], rk_opt, strlen( rk_opt) ) == 0 ) {
+            sscanf ( argv[i] + strlen ( rk_opt ), "%d", &algParams.rk);
         }
         else
         {
@@ -834,6 +843,9 @@ static int runGipuma ( InputFiles &inputFiles,
 
     writeParametersToFile ( resultsFile, inputFiles, algParams, gtParameters, numPixels );
 
+    // TODO: pass pixel coord?
+    samplePoints(numImages, algParams.k, algParams.rk, cameraParams.cameras, inputFiles.img_filenames);
+    return 0;
     //allocation for disparity and normal stores
     vector<Mat_<float> > disp ( algParams.num_img_processed );
     vector<Mat_<uchar> > validCost ( algParams.num_img_processed );
@@ -1215,6 +1227,8 @@ int main(int argc, char **argv)
     if ( ret != 0 )
         return ret;
 
+    cout << "k: " << algParams->k << endl;
+    cout << "rk: " << algParams->rk << endl;
     selectCudaDevice();
 
     Results results;

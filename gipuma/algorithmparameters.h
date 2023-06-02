@@ -48,7 +48,9 @@ struct AlgorithmParameters : public Managed{
         max_angle          (45.0f), // CUDA
         no_texture_sim     (0.9f), // CUDA
         no_texture_per     (0.6f), // CUDA
-        max_views          (9) {}
+        max_views          (9),
+        k                  (41),
+        rk                 (10) {}
     int algorithm; // algorithm cost type
     float max_disparity; // maximal disparity value CUDA
     float min_disparity; // minimum disparity value (default 0) CUDA
@@ -82,4 +84,8 @@ struct AlgorithmParameters : public Managed{
     // hack XXX
     int cols;
     int rows;
+
+    // Strand accurate hair reconstruction params:
+    int k; // 2D samples count
+    int rk; // 2d sample pixel radius
 };
