@@ -844,7 +844,7 @@ static int runGipuma ( InputFiles &inputFiles,
     writeParametersToFile ( resultsFile, inputFiles, algParams, gtParameters, numPixels );
 
     // TODO: pass pixel coord?
-    samplePoints(numImages, algParams.k, algParams.rk, cameraParams.cameras, inputFiles.img_filenames);
+    samplePoints(numImages, algParams.k, algParams.rk, cameraParams.cameras, inputFiles.img_filenames, true);
     return 0;
     //allocation for disparity and normal stores
     vector<Mat_<float> > disp ( algParams.num_img_processed );
