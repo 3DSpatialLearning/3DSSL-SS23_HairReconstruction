@@ -39,7 +39,7 @@ Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point, const Line& 
 void writeSamplesToImage(
     vector<Vec2f> samples,
     const char* outputFolder,
-    const char* outputFileName,
+    string outputFileName,
     const char* inputImageFolder,
     string inputImageName
 );
@@ -48,13 +48,13 @@ vector<vector<Vec2f>> samplePoints(
     size_t numViews,
     int k,
     float rk,
+    int referenceImageIndex,
+    Vec2i pixelCoord,
+    Line line,
     vector<Camera> cameras,
     vector<string> imageFilenames,
     bool writeSamplesInImages = false
 ) {
-    // TODO: use reference image height and width
-    int width = 1100;
-    int height = 1604;
 
     // TODO: remove duplication
     vector<Mat_<float>> Extrinsic(numViews); //Extrinsic 3*4
@@ -75,25 +75,8 @@ vector<vector<Vec2f>> samplePoints(
         }
     }
 
-    // Create a 3D line map with random depth values and unit vectors
-    vector<vector<Line>> lineMap(height);
-    // not so random Initialization
-    for (int y = 0; y < height; ++y) {
-        lineMap[y] = vector<Line>(width);
-        for (int x = 0; x < width; ++x) {
-            lineMap[y][x].depth = 1.1513861;
-            
-            lineMap[y][x].unitDirection << -0.10809, -0.709669, -0.696194;
-            normalize(lineMap[y][x].unitDirection, lineMap[y][x].unitDirection);
-        }
-    }
-
-    const int u = 877;
-    const int v = 1403;
-    const int referenceImageIndex = 11;
-    const int image1Index = 4;
-
-    const Line line = lineMap[v][u];
+    const int u = pixelCoord[0];
+    const int v = pixelCoord[1];
     const Vec3f P1 = getPixelWorldCoord(u, v, cameras[referenceImageIndex].K_inv, line.depth, extrinsic[referenceImageIndex]);
 
     const Vec3f P2 = getPointOn3DLine(P1, line);
@@ -137,7 +120,7 @@ vector<vector<Vec2f>> samplePoints(
             writeSamplesToImage(
                 samplesInImages[i],
                 "./line_projections",
-                imageFilenames[i].c_str(),
+                imageFilenames[i],
                 "data/97_frame_00005",
                 imageFilenames[i]
             );
@@ -252,7 +235,7 @@ Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point, const Line& 
 void writeSamplesToImage(
     vector<Vec2f> samples,
     const char* outputFolder,
-    const char* outputFileName,
+    string outputFileName,
     const char* inputImageFolder,
     string inputImageName
 ) {
@@ -285,8 +268,8 @@ void writeSamplesToImage(
             color[2] = 0;
         }
     }
-
-    writeImageToFile(outputFolder, outputFileName, imageMatrix);
+    outputFileName = outputFileName.substr(0, outputFileName.size()-4);
+    writeImageToFile(outputFolder, outputFileName.c_str(), imageMatrix);
 }
 
 

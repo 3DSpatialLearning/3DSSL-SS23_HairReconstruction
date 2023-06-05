@@ -843,9 +843,35 @@ static int runGipuma ( InputFiles &inputFiles,
 
     writeParametersToFile ( resultsFile, inputFiles, algParams, gtParameters, numPixels );
 
-    // TODO: pass pixel coord?
-    samplePoints(numImages, algParams.k, algParams.rk, cameraParams.cameras, inputFiles.img_filenames, true);
-    return 0;
+    // TODO: add linemap struct
+
+    // TODO: use reference image height and width
+    int width = 1100;
+    int height = 1604;
+    // Create a 3D line map with random depth values and unit vectors
+    vector<vector<Line>> lineMap(height);
+    // not so random Initialization
+    for (int y = 0; y < height; ++y) {
+        lineMap[y] = vector<Line>(width);
+        for (int x = 0; x < width; ++x) {
+            lineMap[y][x].depth = 1.1503102;
+            
+            lineMap[y][x].unitDirection << -0.830786, 0.55644, 0.0129822;
+            normalize(lineMap[y][x].unitDirection, lineMap[y][x].unitDirection);
+        }
+    }
+
+    vector<vector<Vec2f>> points = samplePoints(
+        numImages,
+        algParams.k,
+        algParams.rk,
+        11,
+        Vec2i(862, 1413),
+        lineMap[1413][862],
+        cameraParams.cameras,
+        inputFiles.img_filenames,
+        true
+    );
     //allocation for disparity and normal stores
     vector<Mat_<float> > disp ( algParams.num_img_processed );
     vector<Mat_<uchar> > validCost ( algParams.num_img_processed );

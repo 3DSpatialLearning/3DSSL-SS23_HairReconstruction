@@ -184,7 +184,7 @@ static void writeImageToFile(const char* outputFolder, const char* name, const M
         }
     }
 
-    sprintf(outputPath, "%s/%s", outputFolder, name);
+    sprintf(outputPath, "%s/%s.png", outputFolder, name);
     imwrite(outputPath, img);
 }
 
