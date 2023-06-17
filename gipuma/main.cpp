@@ -845,33 +845,43 @@ static int runGipuma ( InputFiles &inputFiles,
 
     // TODO: add linemap struct
 
-    // TODO: use reference image height and width
-    int width = 1100;
-    int height = 1604;
+    int width = cols;
+    int height = rows;
+
+    cout << "Using width and height: " << width << " " << height << endl;
     // Create a 3D line map with random depth values and unit vectors
-    vector<vector<Line>> lineMap(height);
+    vector<vector<Line>> lineMap(width);
     // not so random Initialization
-    for (int y = 0; y < height; ++y) {
-        lineMap[y] = vector<Line>(width);
-        for (int x = 0; x < width; ++x) {
-            lineMap[y][x].depth = 1.1503102;
+    for (int widthIdx = 0; widthIdx < width; ++widthIdx) {
+        lineMap[widthIdx] = vector<Line>(height);
+        for (int heightIdx = 0; heightIdx < height; ++heightIdx) {
+
+            // line matching hair strand direction for reference image: cam_222200045 
+            lineMap[widthIdx][heightIdx].depth = 1.0675795;
             
-            lineMap[y][x].unitDirection << -0.830786, 0.55644, 0.0129822;
-            normalize(lineMap[y][x].unitDirection, lineMap[y][x].unitDirection);
+            lineMap[widthIdx][heightIdx].unitDirection << -0.12800153, -0.68858582, 0.7137683;
+            normalize(lineMap[widthIdx][heightIdx].unitDirection, lineMap[widthIdx][heightIdx].unitDirection);
         }
     }
+
+    int u = 196;
+    int v = 1225;
+    cout << "Using pixel coord: " << u << " " << v << endl;
+    cout << "Using reference image: " << inputFiles.img_filenames[0] << endl;
 
     vector<vector<Vec2f>> points = samplePoints(
         numImages,
         algParams.k,
         algParams.rk,
-        11,
-        Vec2i(862, 1413),
-        lineMap[1413][862],
+        Vec2i(u, v),
+        lineMap[u][v],
         cameraParams.cameras,
         inputFiles.img_filenames,
+        inputFiles.images_folder,
+        "./line_projections/",
         true
     );
+    return 0;
     //allocation for disparity and normal stores
     vector<Mat_<float> > disp ( algParams.num_img_processed );
     vector<Mat_<uchar> > validCost ( algParams.num_img_processed );

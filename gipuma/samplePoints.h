@@ -40,7 +40,7 @@ void writeSamplesToImage(
     vector<Vec2f> samples,
     const char* outputFolder,
     string outputFileName,
-    const char* inputImageFolder,
+    string inputImageFolder,
     string inputImageName
 );
 
@@ -48,30 +48,32 @@ vector<vector<Vec2f>> samplePoints(
     size_t numViews,
     int k,
     float rk,
-    int referenceImageIndex,
     Vec2i pixelCoord,
     Line line,
     vector<Camera> cameras,
     vector<string> imageFilenames,
+    string images_folder,
+    const char* lineProjectionImagesFolder,
     bool writeSamplesInImages = false
 ) {
-
+    // referenceImage is always the first image passed as an argument to ./gipuma
+    int referenceImageIndex = 0;
     // TODO: remove duplication
     vector<Mat_<float>> Extrinsic(numViews); //Extrinsic 3*4
     vector<Mat_<float>> extrinsic(numViews); //Extrinsic 4*4, with the last row 0, 0, 0, 1
 
-    for (int v = 0; v < numViews; v++) {
-        Extrinsic[v] = Mat::zeros(3, 4, CV_32F);
-        extrinsic[v] = Mat::eye(4, 4, CV_32F);
+    for (int i = 0; i < numViews; i++) {
+        Extrinsic[i] = Mat::zeros(3, 4, CV_32F);
+        extrinsic[i] = Mat::eye(4, 4, CV_32F);
         for (int c = 0; c < 3; c++) {
             for (int d = 0; d < 3; d++) {
-                Extrinsic[v](c, d) = cameras[v].R(c, d);
-                extrinsic[v](c, d) = Extrinsic[v](c, d);
+                Extrinsic[i](c, d) = cameras[i].R(c, d);
+                extrinsic[i](c, d) = Extrinsic[i](c, d);
             }
         }
         for (int c = 0; c < 3; c++) {
-            Extrinsic[v](c, 3) = cameras[v].t(c);;
-            extrinsic[v](c, 3) = Extrinsic[v](c, 3);
+            Extrinsic[i](c, 3) = cameras[i].t(c);;
+            extrinsic[i](c, 3) = Extrinsic[i](c, 3);
         }
     }
 
@@ -91,7 +93,6 @@ vector<vector<Vec2f>> samplePoints(
         v - pixel2[1]
     );
     normalize(lineInRef0UnitVector, lineInRef0UnitVector);
-    // cout << "lineInRef0UnitVector normalized: " << lineInRef0UnitVector.t() << endl;
 
     Vec2f originalPixel(u, v);
     vector<Vec2f> samples;
@@ -107,7 +108,7 @@ vector<vector<Vec2f>> samplePoints(
         for (int j = 0; j < k ; j++) {
             Vec2f samplePixel = samples[j];
 
-            const Vec3f pointWorldCoord(projectSamplePointIn3D(samplePixel, P1, line, cameras[referenceImageIndex].K_inv, Extrinsic[referenceImageIndex]));
+            const Vec3f pointWorldCoord = projectSamplePointIn3D(samplePixel, P1, line, cameras[referenceImageIndex].K_inv, Extrinsic[referenceImageIndex]);
             const Vec2f sampleImage1Coord = projectPointToImage(pointWorldCoord, cameras[i].P);
             samplesInImage.push_back(sampleImage1Coord);
         }
@@ -119,9 +120,9 @@ vector<vector<Vec2f>> samplePoints(
         for (int i = 0; i < numViews ; i++) {
             writeSamplesToImage(
                 samplesInImages[i],
-                "./line_projections",
+                lineProjectionImagesFolder,
                 imageFilenames[i],
-                "data/97_frame_00005",
+                images_folder,
                 imageFilenames[i]
             );
         }
@@ -177,12 +178,7 @@ Vec2f projectPointToImage(const Vec3f& pointWorldCoord, const Mat_<float>& P) {
 
 
 Vec2f projectLineIntoImagePlane(const Vec3f& point, const Line& line, const Mat_<float>& K, const Mat_<float>& Rt) {
-    Vec4f A(
-        point[0],
-        point[1],
-        point[2],
-        1
-    );
+    Vec4f A(point[0], point[1], point[2], 1);
     Vec4f B(
         point[0] + line.unitDirection[0],
         point[1] + line.unitDirection[1],
@@ -211,24 +207,32 @@ Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point, const Line& 
 
     const Mat_<float> samplePointCameraCoord = K_inv * samplePointPixelHomogenCoord;
 
+    const float t1 = Rt(0, 3);
     const float t2 = Rt(1, 3);
     const float t3 = Rt(2, 3);
+
+    const float xPrim = samplePointCameraCoord(0, 0);
     const float yPrim = samplePointCameraCoord(1, 0);
     const Vec3f P = Point;
-    const Vec3f r2(
-        Rt(1, 0),
-        Rt(1, 1),
-        Rt(1, 2)
-    );
 
-    const Vec3f r3(
-        Rt(2, 0),
-        Rt(2, 1),
-        Rt(2, 2)
-    );
+    const Vec3f r1(Rt(0, 0),Rt(0, 1),Rt(0, 2));
+    const Vec3f r2(Rt(1, 0), Rt(1, 1), Rt(1, 2));
+    const Vec3f r3(Rt(2, 0), Rt(2, 1), Rt(2, 2));
+
     const Vec3f l = line.unitDirection;
 
-    float lambda = (yPrim * r3.dot(Point) + yPrim * t3 - r2.dot(P) -t2) / (r2.dot(l) - yPrim * r3.dot(l));
+    float lambda = 0;
+    const float d = r2.dot(l) - yPrim * r3.dot(l);
+    const float n = yPrim * r3.dot(Point) + yPrim * t3 - r2.dot(P) -t2;
+    const float d2 = (r1.dot(l) - xPrim * r3.dot(l));
+    const float n2 = xPrim * r3.dot(Point) + xPrim * t3 - r1.dot(P) -t1;
+
+    if (abs(d) < 0.001f) {
+        lambda = n2/d2;
+    } else {
+        lambda = n/d;
+    }
+    
     return Point + lambda * line.unitDirection;
 }
 
@@ -236,14 +240,12 @@ void writeSamplesToImage(
     vector<Vec2f> samples,
     const char* outputFolder,
     string outputFileName,
-    const char* inputImageFolder,
+    string inputImageFolder,
     string inputImageName
 ) {
-    cout << "inputImageName" << inputImageName << endl;
     // TODO: do not re-read images
     Mat imageMatrix = readImage(inputImageFolder, inputImageName);
-
-    for (unsigned int i = 0; i <= samples.size(); i++) {
+    for (unsigned int i = 0; i < samples.size(); i++) {
         if (
             samples[i][1] < 0 ||
             samples[i][1] > imageMatrix.rows - 1 ||
@@ -254,6 +256,7 @@ void writeSamplesToImage(
                 ", " << samples[i][1] << ")\n";
             continue;
         }
+
         Vec3b& color = imageMatrix.at<Vec3b>(samples[i][1], samples[i][0]);
 
         color[0] = 0;

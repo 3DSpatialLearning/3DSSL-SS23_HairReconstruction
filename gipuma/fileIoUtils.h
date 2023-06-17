@@ -483,14 +483,13 @@ static int readPfm( const char *filename,
 }
 
 
-Mat_<Vec3b> readImage(const char* inputFolder, string name){
+Mat_<Vec3b> readImage(string inputFolder, string name){
+    const char* inputFolderC = inputFolder.c_str();
     const char* fileName = name.c_str();
     char inputPath[256];
-    sprintf(inputPath, "%s/%s", inputFolder, fileName);
+    sprintf(inputPath, "%s/%s", inputFolderC, fileName);
 
-    cout<< endl<< endl << "name" << name << endl<< endl;
-    cout << "inputPath" << inputPath << endl;
     Mat_<Vec3b> img = imread(inputPath, IMREAD_COLOR );
-    cout << "img" << img.rows;
+
     return img;
 }
