@@ -3,34 +3,18 @@
 #include <iostream>
 #include <fstream>
 
-
 #include "fileIoUtils.h"
+#include "line.h"
+#include "projectionUtils.h"
 #include <stdexcept>
-
-struct Line {
-    // Z coord of 3D point in reference camera frame coord system
-    float depth;
-    // Normalized direction of line in world space
-    Vec3f unitDirection;
-};
-
-// Given:   a pixel (u, v) and a Z coordinate d
-// Returns: the 3D coordinates of the point in world space
-Vec3f getPixelWorldCoord(int u, int v, const Mat_<float>& K_inv, float d, const Mat_<float>& Rt);
 
 // Given:   a 3D point and a 3D line
 // Returns: another point that lies on the line
 Vec3f getPointOn3DLine(const Vec3f& p, Line line);
 
-// Given:   3D point world coordinates
-// Returns: pixel coordinates
-Vec2f projectPointToImage(const Vec3f& pointWorldCoord, const Mat_<float>& P);
-
-
 // Given:   3D point world coordinates and a line
 // Returns: projection of the line in camera reference using Plucker coordinates
 Vec2f projectLineIntoImagePlane(const Vec3f& point, const Line& line, const Mat_<float>& K, const Mat_<float>& Rt);
-
 
 // Given:   pixel coordinates and a 3D line
 // Returns: world coordinates of the point that lie on the 3D line 
@@ -58,33 +42,15 @@ vector<vector<Vec2f>> samplePoints(
 ) {
     // referenceImage is always the first image passed as an argument to ./gipuma
     int referenceImageIndex = 0;
-    // TODO: remove duplication
-    vector<Mat_<float>> Extrinsic(numViews); //Extrinsic 3*4
-    vector<Mat_<float>> extrinsic(numViews); //Extrinsic 4*4, with the last row 0, 0, 0, 1
-
-    for (int i = 0; i < numViews; i++) {
-        Extrinsic[i] = Mat::zeros(3, 4, CV_32F);
-        extrinsic[i] = Mat::eye(4, 4, CV_32F);
-        for (int c = 0; c < 3; c++) {
-            for (int d = 0; d < 3; d++) {
-                Extrinsic[i](c, d) = cameras[i].R(c, d);
-                extrinsic[i](c, d) = Extrinsic[i](c, d);
-            }
-        }
-        for (int c = 0; c < 3; c++) {
-            Extrinsic[i](c, 3) = cameras[i].t(c);;
-            extrinsic[i](c, 3) = Extrinsic[i](c, 3);
-        }
-    }
 
     const int u = pixelCoord[0];
     const int v = pixelCoord[1];
-    const Vec3f P1 = getPixelWorldCoord(u, v, cameras[referenceImageIndex].K_inv, line.depth, extrinsic[referenceImageIndex]);
+    const Vec3f P1 = getPixelWorldCoord(pixelCoord, line.depth, cameras[referenceImageIndex].K_inv, cameras[referenceImageIndex].Rt_extended_inv);
 
     const Vec3f P2 = getPointOn3DLine(P1, line);
     const Vec2f pixel2 = projectPointToImage(P2, cameras[referenceImageIndex].P);
 
-    const Vec2f pluckerCoord = projectLineIntoImagePlane(P1, line, cameras[referenceImageIndex].K, Extrinsic[referenceImageIndex]);
+    const Vec2f pluckerCoord = projectLineIntoImagePlane(P1, line, cameras[referenceImageIndex].K, cameras[referenceImageIndex].Rt);
 
     // cout << "pluckerCoord: " << pluckerCoord.t() << endl;
 
@@ -108,7 +74,7 @@ vector<vector<Vec2f>> samplePoints(
         for (int j = 0; j < k ; j++) {
             Vec2f samplePixel = samples[j];
 
-            const Vec3f pointWorldCoord = projectSamplePointIn3D(samplePixel, P1, line, cameras[referenceImageIndex].K_inv, Extrinsic[referenceImageIndex]);
+            const Vec3f pointWorldCoord = projectSamplePointIn3D(samplePixel, P1, line, cameras[referenceImageIndex].K_inv, cameras[referenceImageIndex].Rt);
             const Vec2f sampleImage1Coord = projectPointToImage(pointWorldCoord, cameras[i].P);
             samplesInImage.push_back(sampleImage1Coord);
         }
@@ -132,48 +98,8 @@ vector<vector<Vec2f>> samplePoints(
 }
 
 
-// TODO: pass P_inv?
-Vec3f getPixelWorldCoord(int u, int v, const Mat_<float>& K_inv, float d, const Mat_<float>& Rt) {
-    Mat_<float> Rt_inv = Rt.inv();
-    Vec3f pixelHomogenCoord(u * d, v * d, d);
-
-    Mat_<float> pointCameraCoord = K_inv * pixelHomogenCoord;
-    Vec4f pointCameraHomogenCoord(
-        pointCameraCoord[0][0],
-        pointCameraCoord[1][0],
-        pointCameraCoord[2][0],
-        1.f
-    );
-
-    Mat_<float> pointWorldHomogenCoord = Rt_inv * pointCameraHomogenCoord;
-    Vec3f pointWorldCoord(
-        pointWorldHomogenCoord[0][0],
-        pointWorldHomogenCoord[1][0],
-        pointWorldHomogenCoord[2][0]
-    );
-
-    return pointWorldCoord;
-}
-
 Vec3f getPointOn3DLine(const Vec3f& p, Line line) {
     return p + line.unitDirection;
-}
-
-Vec2f projectPointToImage(const Vec3f& pointWorldCoord, const Mat_<float>& P) {
-    const Vec4f pointWorldHomogenCoord(
-        pointWorldCoord[0],
-        pointWorldCoord[1],
-        pointWorldCoord[2],
-        1
-    );
-
-    const Mat_<float> pointCameraHomogenCoord = P * pointWorldHomogenCoord;
-    const Vec2f pointCameraCoord(
-        pointCameraHomogenCoord[0][0] / pointCameraHomogenCoord[2][0],
-        pointCameraHomogenCoord[1][0] / pointCameraHomogenCoord[2][0]
-    );
-
-    return pointCameraCoord;
 }
 
 

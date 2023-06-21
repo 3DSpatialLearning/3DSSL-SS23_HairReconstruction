@@ -40,7 +40,9 @@
 #include "mathUtils.h"
 #include "displayUtils.h"
 #include "groundTruthUtils.h"
+#include "line.h"
 #include "samplePoints.h"
+#include "lineRefinement.h"
 
 
 // file format from https://www.cs.cornell.edu/~snavely/bundler/bundler-v0.4-manual.html#S6
@@ -863,6 +865,58 @@ static int runGipuma ( InputFiles &inputFiles,
             normalize(lineMap[widthIdx][heightIdx].unitDirection, lineMap[widthIdx][heightIdx].unitDirection);
         }
     }
+
+    // Code to test line refinement
+    // int p1u = 196;
+    // int p1v = 1225;
+    // int p2u = 200;
+    // int p2v = 1400;
+    // lineMap[p1u][p1v].depth = 1.0675795;
+    // lineMap[p1u][p1v].unitDirection << 1, 0, 0;
+
+    // // lineMap[p2u][p2v].depth = 1.0675795;
+    // lineMap[p2u][p2v].depth = 1.0255795;
+    // lineMap[p2u][p2v].unitDirection << -0.12800153, -0.68858582, 0.7137683;
+
+    // samplePoints(
+    //     numImages,
+    //     algParams.k,
+    //     algParams.rk,
+    //     Vec2i(p1u, p1v),
+    //     lineMap[p1u][p1v],
+    //     cameraParams.cameras,
+    //     inputFiles.img_filenames,
+    //     inputFiles.images_folder,
+    //     "./line_projections_before_update/",
+    //     true
+    // );
+
+    // Line updatedLineParams = refineLine(
+    //     Vec2i(p1u, p1v),
+    //     lineMap[p1u][p1v],
+    //     Vec2i(p2u, p2v),
+    //     lineMap[p2u][p2v],
+    //     cameraParams.cameras[0].C,
+    //     cameraParams.cameras[0].K_inv,
+    //     cameraParams.cameras[0].Rt_extended_inv,
+    //     cameraParams.cameras[0].Rt
+    // );
+
+    // cout << "updatedLineParams" << updatedLineParams.depth << " " << updatedLineParams.unitDirection << endl;
+
+
+    // samplePoints(
+    //     numImages,
+    //     algParams.k,
+    //     algParams.rk,
+    //     Vec2i(p1u, p1v),
+    //     updatedLineParams,
+    //     cameraParams.cameras,
+    //     inputFiles.img_filenames,
+    //     inputFiles.images_folder,
+    //     "./line_projections_after_update/",
+    //     true
+    // );
 
     int u = 196;
     int v = 1225;

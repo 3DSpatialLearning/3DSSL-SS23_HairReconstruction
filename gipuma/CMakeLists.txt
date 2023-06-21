@@ -59,7 +59,9 @@ cuda_add_executable(
     main.h
     gipuma.cu
     main.cpp
+    line.h
     samplePoints.h
+    lineRefinement.h
     )
 
 # For linking ...

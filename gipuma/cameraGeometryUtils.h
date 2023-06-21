@@ -349,6 +349,28 @@ CameraParameters getCameraParameters ( CameraParameters_cu &cpc,
         Mat_<float> tmpKinv = params.K_inv.t ();
     }
 
+
+
+    for (int i = 0; i < numCameras; i++) {
+        Mat_<float> Rt = Mat::zeros(3, 4, CV_32F);
+        Mat_<float> Rt_extended = Mat::eye(4, 4, CV_32F);
+        for (int c = 0; c < 3; c++) {
+            for (int d = 0; d < 3; d++) {
+                Rt(c, d) = params.cameras[i].R(c, d);
+                Rt_extended(c, d) = Rt(c, d);
+            }
+        }
+        for (int c = 0; c < 3; c++) {
+            Rt(c, 3) = params.cameras[i].t(c);;
+            Rt_extended(c, 3) = Rt(c, 3);
+        }
+
+        params.cameras[i].Rt = Rt;
+        params.cameras[i].Rt_extended = Rt_extended;
+        params.cameras[i].Rt_extended_inv = Rt_extended.inv();;
+    }
+
+
     return params;
 }
 

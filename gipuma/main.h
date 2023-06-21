@@ -109,6 +109,11 @@ struct Camera {
     Mat_<float> K;
     Mat_<float> K_inv;
     //float f;
+
+
+    Mat_<float> Rt;
+    Mat_<float> Rt_extended;
+    Mat_<float> Rt_extended_inv;
 };
 
 //parameters for camera geometry setup (assuming that K1 = K2 = K, P1 = K [I | 0] and P2 = K [R | t])
