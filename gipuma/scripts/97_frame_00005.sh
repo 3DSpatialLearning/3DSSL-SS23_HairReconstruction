@@ -24,8 +24,8 @@ min_angle=30
 max_angle=90
 
 # strand accurate hair reconstruction params
-k=141
-rk=100
+k=41
+rk=10
 
 # Temporary run Gipuma only once
 cmd="./gipuma cam_222200045.png cam_220700191.png cam_221501007.png cam_222200036.png cam_222200037.png cam_222200038.png cam_222200039.png cam_222200040.png cam_222200041.png cam_222200042.png cam_222200043.png cam_222200044.png cam_222200046.png cam_222200047.png cam_222200048.png cam_222200049.png

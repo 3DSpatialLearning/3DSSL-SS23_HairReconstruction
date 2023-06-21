@@ -881,7 +881,52 @@ static int runGipuma ( InputFiles &inputFiles,
         "./line_projections/",
         true
     );
-    return 0;
+
+    for (int a = 0; a < 16; a++)
+    {
+        cout << "view" << a << "\n";
+        for (int b = 0; b < 41; b++)
+        {
+            cout << points[a][b][0] << " " << points[a][b][1] << "\n";
+        }
+    }
+
+
+    // for (int i = 0; i < 16; i++) {
+    //     cout << i << "\n";
+    //     cout << "The " << i << "th view:\n";
+    //     for (int j = 0; j < 41; j++) {
+    //         cout << "The " << j << "th sample:\n";
+    //         cout << points[i][j] << "\n";
+    //     }
+    // }
+    // cout << endl;
+
+//     vector<vector<float>> GetIntensityValue_cv(const vector<string>& imagepath, const vector<vector<Vec2f>>& points)
+// {
+// 	vector<vector<float>> intensity(16, vector<float>(41));
+// 	for (int i = 0; i < 16; i++)
+// 	{
+// 		Mat image_1 = cv::imread(imagepath[i], IMREAD_GRAYSCALE);
+// 		for (int j = 0; j < 41; j++)
+// 		{
+// 			intensity[i][j] = static_cast<float>(image_1.at<uchar>(int(points[i][j][0]), int(points[i][j][1])));
+// 		}
+// 	}
+// 	return intensity;
+// }
+
+
+
+
+//vector<vector<float>> intensity(16, vector<float>(41));
+//intensity = GetIntensityValue_cv(inputFiles.img_filenames, points);
+cout << "Successfully get the intensity values!\n";
+
+
+
+
+
     //allocation for disparity and normal stores
     vector<Mat_<float> > disp ( algParams.num_img_processed );
     vector<Mat_<uchar> > validCost ( algParams.num_img_processed );
