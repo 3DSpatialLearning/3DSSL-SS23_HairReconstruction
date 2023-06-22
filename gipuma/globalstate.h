@@ -5,6 +5,7 @@
 #include "linestate.h"
 #include "imageinfo.h"
 #include "managed.h"
+#include "lineMap_cu.h"
 
 // Includes CUDA
 #include <cuda_runtime.h>
@@ -25,6 +26,7 @@ class GlobalState : public Managed {
 public:
     CameraParameters_cu *cameras;
     LineState *lines;
+    LineMap_cu *lineMap;
     curandState *cs;
     AlgorithmParameters *params;
 
@@ -36,10 +38,12 @@ public:
         //printf("GlobalState constructor\n");
         cameras = new CameraParameters_cu;
         lines = new LineState;
+        lineMap = new LineMap_cu;
     }
     ~GlobalState() {
         //printf("GlobalState destructor\n");
         delete cameras;
         delete lines;
+        delete lineMap;
     }
 };
