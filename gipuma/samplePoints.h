@@ -1,7 +1,7 @@
 #pragma once
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #include "fileIoUtils.h"
 #include "line.h"
@@ -14,19 +14,18 @@ Vec3f getPointOn3DLine(const Vec3f& p, Line line);
 
 // Given:   3D point world coordinates and a line
 // Returns: projection of the line in camera reference using Plucker coordinates
-Vec2f projectLineIntoImagePlane(const Vec3f& point, const Line& line, const Mat_<float>& K, const Mat_<float>& Rt);
+Vec2f projectLineIntoImagePlane(const Vec3f& point, const Line& line,
+                                const Mat_<float>& K, const Mat_<float>& Rt);
 
 // Given:   pixel coordinates and a 3D line
-// Returns: world coordinates of the point that lie on the 3D line 
-Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point, const Line& line, const Mat_<float>& K_inv, const Mat_<float>&  Rt);
+// Returns: world coordinates of the point that lie on the 3D line
+Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point,
+                             const Line& line, const Mat_<float>& K_inv,
+                             const Mat_<float>& Rt);
 
-void writeSamplesToImage(
-    vector<Vec2f> samples,
-    const char* outputFolder,
-    string outputFileName,
-    string inputImageFolder,
-    string inputImageName
-);
+void writeSamplesToImage(vector<Vec2f> samples, const char* outputFolder,
+                         string outputFileName, string inputImageFolder,
+                         string inputImageName);
 
 vector<vector<Vec2f>> samplePoints(
     size_t numViews,
@@ -45,12 +44,17 @@ vector<vector<Vec2f>> samplePoints(
 
     const int u = pixelCoord[0];
     const int v = pixelCoord[1];
-    const Vec3f P1 = getPixelWorldCoord(pixelCoord, line.depth, cameras[referenceImageIndex].K_inv, cameras[referenceImageIndex].Rt_extended_inv);
+    const Vec3f P1 = getPixelWorldCoord(
+        pixelCoord, line.depth, cameras[referenceImageIndex].K_inv,
+        cameras[referenceImageIndex].Rt_extended_inv);
 
     const Vec3f P2 = getPointOn3DLine(P1, line);
-    const Vec2f pixel2 = projectPointToImage(P2, cameras[referenceImageIndex].P);
+    const Vec2f pixel2 =
+        projectPointToImage(P2, cameras[referenceImageIndex].P);
 
-    const Vec2f pluckerCoord = projectLineIntoImagePlane(P1, line, cameras[referenceImageIndex].K, cameras[referenceImageIndex].Rt);
+    const Vec2f pluckerCoord =
+        projectLineIntoImagePlane(P1, line, cameras[referenceImageIndex].K,
+                                  cameras[referenceImageIndex].Rt);
 
     // cout << "pluckerCoord: " << pluckerCoord.t() << endl;
 
@@ -66,12 +70,11 @@ vector<vector<Vec2f>> samplePoints(
         Vec2f samplePixel = originalPixel + 2 * i * rk * lineInRef0UnitVector / k;
         samples.push_back(samplePixel);
     }
-    
 
     vector<vector<Vec2f>> samplesInImages(numViews);
-    for (int i = 0; i < numViews ; i++) {
+    for (int i = 0; i < numViews; i++) {
         vector<Vec2f> samplesInImage;
-        for (int j = 0; j < k ; j++) {
+        for (int j = 0; j < k; j++) {
             Vec2f samplePixel = samples[j];
 
             const Vec3f pointWorldCoord = projectSamplePointIn3D(samplePixel, P1, line, cameras[referenceImageIndex].K_inv, cameras[referenceImageIndex].Rt);
@@ -79,7 +82,6 @@ vector<vector<Vec2f>> samplePoints(
             samplesInImage.push_back(sampleImage1Coord);
         }
         samplesInImages[i] = samplesInImage;
-    
     }
 
     if (writeSamplesInImages) {
@@ -97,13 +99,16 @@ vector<vector<Vec2f>> samplePoints(
     return samplesInImages;
 }
 
-
 Vec3f getPointOn3DLine(const Vec3f& p, Line line) {
     return p + line.unitDirection;
 }
 
-
-Vec2f projectLineIntoImagePlane(const Vec3f& point, const Line& line, const Mat_<float>& K, const Mat_<float>& Rt) {
+Vec2f projectLineIntoImagePlane(
+    const Vec3f& point,
+    const Line& line,
+    Mat_<float>& K,
+    const Mat_<float>& Rt
+) {
     Vec4f A(point[0], point[1], point[2], 1);
     Vec4f B(
         point[0] + line.unitDirection[0],
@@ -123,13 +128,10 @@ Vec2f projectLineIntoImagePlane(const Vec3f& point, const Line& line, const Mat_
     return ll;
 }
 
-
-Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point, const Line& line, const Mat_<float>& K_inv, const Mat_<float>&  Rt) {
-    const Vec3f samplePointPixelHomogenCoord(
-        samplePoint[0],
-        samplePoint[1],
-        1
-    );
+Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point,
+                             const Line& line, const Mat_<float>& K_inv,
+                             const Mat_<float>& Rt) {
+    const Vec3f samplePointPixelHomogenCoord(samplePoint[0], samplePoint[1], 1);
 
     const Mat_<float> samplePointCameraCoord = K_inv * samplePointPixelHomogenCoord;
 
@@ -141,7 +143,7 @@ Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point, const Line& 
     const float yPrim = samplePointCameraCoord(1, 0);
     const Vec3f P = Point;
 
-    const Vec3f r1(Rt(0, 0),Rt(0, 1),Rt(0, 2));
+    const Vec3f r1(Rt(0, 0), Rt(0, 1), Rt(0, 2));
     const Vec3f r2(Rt(1, 0), Rt(1, 1), Rt(1, 2));
     const Vec3f r3(Rt(2, 0), Rt(2, 1), Rt(2, 2));
 
@@ -149,16 +151,16 @@ Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point, const Line& 
 
     float lambda = 0;
     const float d = r2.dot(l) - yPrim * r3.dot(l);
-    const float n = yPrim * r3.dot(Point) + yPrim * t3 - r2.dot(P) -t2;
+    const float n = yPrim * r3.dot(Point) + yPrim * t3 - r2.dot(P) - t2;
     const float d2 = (r1.dot(l) - xPrim * r3.dot(l));
-    const float n2 = xPrim * r3.dot(Point) + xPrim * t3 - r1.dot(P) -t1;
+    const float n2 = xPrim * r3.dot(Point) + xPrim * t3 - r1.dot(P) - t1;
 
     if (abs(d) < 0.001f) {
-        lambda = n2/d2;
+        lambda = n2 / d2;
     } else {
-        lambda = n/d;
+        lambda = n / d;
     }
-    
+
     return Point + lambda * line.unitDirection;
 }
 
@@ -197,12 +199,6 @@ void writeSamplesToImage(
             color[2] = 0;
         }
     }
-    outputFileName = outputFileName.substr(0, outputFileName.size()-4);
+    outputFileName = outputFileName.substr(0, outputFileName.size() - 4);
     writeImageToFile(outputFolder, outputFileName.c_str(), imageMatrix);
 }
-
-
-
-
-
-

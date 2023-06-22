@@ -1,12 +1,9 @@
 #pragma once
 
 #include <iostream>
-#include <fstream>
 
 #include "line.h"
 #include "projectionUtils.h"
-#include <stdexcept>
-#include <iomanip> 
 
 const float EPSILON = 0.0001;
 
@@ -43,7 +40,7 @@ Line refineLine(
     lhs[0][0] = l1[0];
     lhs[1][0] = l1[1];
     lhs[2][0] = l1[2];
-    
+
     lhs[0][1] = -l2[0];
     lhs[1][1] = -l2[1];
     lhs[2][1] = -l2[2];
@@ -66,6 +63,6 @@ Line refineLine(
     Line updatedLine;
     updatedLine.depth = newDepth;
     updatedLine.unitDirection = line2.unitDirection;
-    
+
     return updatedLine;
 }
