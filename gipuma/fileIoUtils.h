@@ -6,6 +6,10 @@
 
 #include <iostream>
 #include <fstream>
+#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 static void getProjectionMatrix(char* line, Mat_<float> &P){
     const char* p;
@@ -492,4 +496,40 @@ Mat_<Vec3b> readImage(string inputFolder, string name){
     Mat_<Vec3b> img = imread(inputPath, IMREAD_COLOR );
 
     return img;
+}
+
+
+//read the orientation and confidence map
+//input: filepath
+//output: a matrix(double) store the orientation/confidence values
+cv::Mat importFloatImage__(const std::string& filePath) {
+	// Open the file for reading as a binary file
+	std::ifstream file(filePath, std::ios::binary);
+
+	if (!file.is_open()) {
+		std::cerr << "Error opening file: " << filePath << std::endl;
+		return cv::Mat();
+	}
+
+	try {
+		// Read the width and height from the file
+		int width, height;
+		file.read(reinterpret_cast<char*>(&height), sizeof(int));
+		file.read(reinterpret_cast<char*>(&width), sizeof(int));
+		// Create a cv::Mat object for the float image
+		cv::Mat floatImage(height, width, CV_64F);
+		// Why not cv:imread?
+		// Read the pixel values from the file
+		file.read(reinterpret_cast<char*>(floatImage.ptr()), floatImage.total() * sizeof(double));
+
+		// Close the file
+		file.close();
+
+		//std::cout << "Float image imported successfully: " << filePath << std::endl;
+		return floatImage;
+	}
+	catch (const std::exception& e) {
+		std::cerr << "Error importing float image: " << e.what() << std::endl;
+		return cv::Mat();
+	}
 }

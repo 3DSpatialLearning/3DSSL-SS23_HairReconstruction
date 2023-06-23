@@ -51,6 +51,8 @@ struct InputFiles {
     string bounding_folder; //path to bounding volume (Strecha)
     string seed_file; // path to bounding volume (Strecha)
     string pmvs_folder; // path to pmvs folder
+    string orientation_maps_folder; // path to orientations images
+    string confidence_values_folder; // path to confidence values images
 };
 
 //pathes to output files

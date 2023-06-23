@@ -2,6 +2,8 @@
 prog="./gipuma"
 warping="../fusibile/fusibile"
 inputdir="data/97_frame_00005/"
+orientaionMapsDir="data/97_frame_00005/orient"
+confidenceValuesDir="data/97_frame_00005/conf"
 batch_name="97_frame_00005_cam"
 output_dir_basename="results/$batch_name"
 p_folder="data/97_frame_00005/cam_par.txt"
@@ -45,7 +47,9 @@ cmd="./gipuma cam_222200045.png cam_220700191.png cam_221501007.png cam_22220003
     --max_angle=$max_angle
     -color_processing
     -k=$k
-    -rk=$rk"
+    -rk=$rk
+    -orientation_maps_folder $orientaionMapsDir
+    -confidence_values_folder $confidenceValuesDir"
 echo $cmd
 $cmd
 
