@@ -30,6 +30,13 @@ public:
 
     cudaTextureObject_t imgs  [MAX_IMAGES];
     cudaArray *cuArray[MAX_IMAGES];
+
+    cudaTextureObject_t orientaionMap[MAX_IMAGES];
+    cudaArray *cuArrayOrient[MAX_IMAGES];
+
+    cudaTextureObject_t confidenceValue[MAX_IMAGES];
+    cudaArray *cuArrayConf[MAX_IMAGES];
+
     //cudaTextureObject_t gradx [MAX_IMAGES];
     //cudaTextureObject_t grady [MAX_IMAGES];
     GlobalState() {

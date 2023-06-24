@@ -34,11 +34,9 @@ __managed__ int TILE_W;
 __managed__ int TILE_H;
 #endif
 
-__device__ FORCEINLINE_GIPUMA float curand_between(
-    curandState *cs,
-    const float &min,
-    const float &max
-) {
+__device__ FORCEINLINE_GIPUMA float curand_between(curandState *cs,
+                                                   const float &min,
+                                                   const float &max) {
     return curand_uniform(cs) * (max - min) + min;
 }
 
@@ -61,7 +59,7 @@ __device__ FORCEINLINE_GIPUMA static void rndUnitVectorSphereMarsaglia_cu(
 template <typename T>
 __global__ void gipuma_init_cu2(GlobalState &gs) {
     const int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
-                            blockIdx.y * blockDim.y + threadIdx.y);
+                             blockIdx.y * blockDim.y + threadIdx.y);
     const int rows = gs.cameras->rows;
     const int cols = gs.cameras->cols;
     if (p.x >= cols) return;
@@ -75,7 +73,7 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
     float3 generatedUnitDir;
     rndUnitVectorSphereMarsaglia_cu(&generatedUnitDir, &localState);
     gs.lines->unitDirection[center] = generatedUnitDir;
-    
+
     // use disparity instead of depth?
     float mind = gs.params->depthMin;
     float maxd = gs.params->depthMax;
@@ -84,7 +82,6 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
     // TODO: compute and save cost
     return;
 }
-
 
 template <typename T>
 __global__ void gipuma_black_spatialPropClose_cu(GlobalState &gs) {
@@ -100,7 +97,6 @@ __global__ void gipuma_black_spatialPropClose_cu(GlobalState &gs) {
     tile_offset.y = 2.0 * blockIdx.y * blockDim.y - WIN_RADIUS_H;
     // gipuma_checkerboard_spatialPropClose_cu<T>(gs, p, tile_offset, iter);
 }
-
 
 template <typename T>
 __global__ void gipuma_black_spatialPropFar_cu(GlobalState &gs) {
@@ -129,7 +125,7 @@ __global__ void gipuma_black_lineRefine_cu(GlobalState &gs) {
     tile_offset.x = blockIdx.x * blockDim.x - WIN_RADIUS_W;
     tile_offset.y = 2.0 * blockIdx.y * blockDim.y - WIN_RADIUS_H;
     printf("gipuma_black_lineRefine_cu x, y: %d %d \n", p.x, p.y);
-    
+
     // gipuma_checkerboard_lineRefinement_cu<T>(gs, p, tile_offset, iter);
 }
 
@@ -231,7 +227,6 @@ void gipuma(GlobalState &gs) {
     block_size_initrand.x = 16;
     block_size_initrand.y = 16;
 
-
     size_t avail;
     size_t total;
     cudaMemGetInfo(&avail, &total);
@@ -243,15 +238,12 @@ void gipuma(GlobalState &gs) {
     printf("Number of iterations is %d\n", maxiter);
     gipuma_init_cu2<T><<<grid_size_initrand, block_size_initrand>>>(gs);
 
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) printf("Error: %s\n", cudaGetErrorString(err));
-
     cudaDeviceSynchronize();
     cudaEventRecord(start);
     // for (int it =0;it<gs.params.iterations; it++) {
     printf("Iteration ");
     for (int it = 0; it < 0; it++) {
-    // for (int it = 0; it < maxiter; it++) {
+        // for (int it = 0; it < maxiter; it++) {
         printf("%d ", it + 1);
         // spatial propagation of 4 closest neighbors (1px up/down/left/right)
         gipuma_black_spatialPropClose_cu<T>
@@ -282,7 +274,6 @@ void gipuma(GlobalState &gs) {
         gipuma_red_lineRefine_cu<T>
             <<<grid_size, block_size, shared_size_host * sizeof(T)>>>(gs);
         cudaDeviceSynchronize();
-
     }
     printf("\n");
     printf("here?\n");
@@ -298,74 +289,14 @@ void gipuma(GlobalState &gs) {
     printf("\t\tTotal time needed for computation: %f seconds\n",
            milliseconds / 1000.f);
 
-    // cudaError_t err = cudaGetLastError();
-    // if (err != cudaSuccess) printf("Error: %s\n", cudaGetErrorString(err));
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) printf("Error: %s\n", cudaGetErrorString(err));
 
     // print results to file
     cudaFree(&gs.cs);
 }
 
-
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
-
-#include <stdio.h>
-
-__global__ void addKernel(int* c, const int* a, const int* b, int size) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    printf("Adding %d ", i);
-    if (i < size) {
-        c[i] = a[i] + b[i];
-    }
-}
-
-// Helper function for using CUDA to add vectors in parallel.
-void addWithCuda(int* c, const int* a, const int* b, int size) {
-    int* dev_a = nullptr;
-    int* dev_b = nullptr;
-    int* dev_c = nullptr;
-
-    // Allocate GPU buffers for three vectors (two input, one output)
-    cudaMalloc((void**)&dev_c, size * sizeof(int));
-    cudaMalloc((void**)&dev_a, size * sizeof(int));
-    cudaMalloc((void**)&dev_b, size * sizeof(int));
-
-    // Copy input vectors from host memory to GPU buffers.
-    cudaMemcpy(dev_a, a, size * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(dev_b, b, size * sizeof(int), cudaMemcpyHostToDevice);
-
-    // Launch a kernel on the GPU with one thread for each element.
-    // 2 is number of computational blocks and (size + 1) / 2 is a number of threads in a block
-    addKernel<<<2, (size + 1) / 2>>>(dev_c, dev_a, dev_b, size);
-    
-    // cudaDeviceSynchronize waits for the kernel to finish, and returns
-    // any errors encountered during the launch.
-    cudaDeviceSynchronize();
-
-    // Copy output vector from GPU buffer to host memory.
-    cudaMemcpy(c, dev_c, size * sizeof(int), cudaMemcpyDeviceToHost);
-
-    cudaFree(dev_c);
-    cudaFree(dev_a);
-    cudaFree(dev_b);
-}
-
-int sumels() {
-    const int arraySize = 5;
-    const int a[arraySize] = {  1,  2,  3,  4,  5 };
-    const int b[arraySize] = { 10, 20, 30, 40, 50 };
-    int c[arraySize] = { 0 };
-
-    addWithCuda(c, a, b, arraySize);
-
-    printf("{1, 2, 3, 4, 5} + {10, 20, 30, 40, 50} = {%d, %d, %d, %d, %d}\n", c[0], c[1], c[2], c[3], c[4]);
-
-    cudaDeviceReset();
-
-    return 0;
-}
-int runcuda(GlobalState &gs) {   
-    // sumels();
+int runcuda(GlobalState &gs) {
     gipuma<float>(gs);
     return 0;
 }
