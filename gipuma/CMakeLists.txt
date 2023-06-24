@@ -60,8 +60,6 @@ cuda_add_executable(
     gipuma.cu
     main.cpp
     line.h
-    line_cu.h
-    lineMap_cu.h
     samplePoints.h
     lineRefinement.h
     )
