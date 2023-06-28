@@ -309,6 +309,7 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
 
     const cudaTextureObject_t referenceImg = gs.imgs[referenceImageIndex];
 
+    int validViewsCount = 0;
     for (int i = 1; i < selectedViewsNumber; i++) {
         int cameraIdx = selectedViewsSubset[i];
         const cudaTextureObject_t otherImg = gs.imgs[cameraIdx];
@@ -341,6 +342,8 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
             intensityCost += 1000.f;
             printf("WARNING! validSamples is 0\n");
             continue;
+        } else {
+            validViewsCount += 1;
         }
         const float referenceImageIntensityMean =
             referenceImageIntensitySum / validSamples;
@@ -377,6 +380,11 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
             float correlation = numerator / denominator;
             intensityCost += correlation;
         }
+    }
+    if (validViewsCount == 0) {
+        // What to do here?
+        intensityCost = 1000.f;
+        printf("WARNING! valid views count is 0\n");
     }
     float alpha = 0.1;
     cost = (1 - alpha) * geometricCost + alpha * intensityCost;
