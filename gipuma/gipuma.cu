@@ -56,42 +56,50 @@ __device__ FORCEINLINE_GIPUMA static void rndUnitVectorSphereMarsaglia_cu(
     v->z = 1.0f - 2.0f * sum;
 }
 
-__device__ FORCEINLINE_GIPUMA void getPixelWorldCoord_cu(
-    const int2 pixel,
-    const float depth,
-    const float* K_inv,
-    const float* Rt_inv,
-    float3* res
-) {
+__device__ FORCEINLINE_GIPUMA void getPixelWorldCoord_cu(const int2 pixel,
+                                                         const float depth,
+                                                         const float *K_inv,
+                                                         const float *Rt_inv,
+                                                         float3 *res) {
     float3 pixelHomogenCoord;
     pixelHomogenCoord.x = pixel.x * depth;
     pixelHomogenCoord.y = pixel.y * depth;
     pixelHomogenCoord.z = depth;
 
     float4 pixelCameraHomogenCoord;
-    pixelCameraHomogenCoord.x = K_inv[0] * pixelHomogenCoord.x + K_inv[1] * pixelHomogenCoord.y + K_inv[2] * pixelHomogenCoord.z;
-    pixelCameraHomogenCoord.y = K_inv[3] * pixelHomogenCoord.x + K_inv[4] * pixelHomogenCoord.y + K_inv[5] * pixelHomogenCoord.z;
-    pixelCameraHomogenCoord.z = K_inv[6] * pixelHomogenCoord.x + K_inv[7] * pixelHomogenCoord.y + K_inv[8] * pixelHomogenCoord.z;
+    pixelCameraHomogenCoord.x = K_inv[0] * pixelHomogenCoord.x +
+                                K_inv[1] * pixelHomogenCoord.y +
+                                K_inv[2] * pixelHomogenCoord.z;
+    pixelCameraHomogenCoord.y = K_inv[3] * pixelHomogenCoord.x +
+                                K_inv[4] * pixelHomogenCoord.y +
+                                K_inv[5] * pixelHomogenCoord.z;
+    pixelCameraHomogenCoord.z = K_inv[6] * pixelHomogenCoord.x +
+                                K_inv[7] * pixelHomogenCoord.y +
+                                K_inv[8] * pixelHomogenCoord.z;
     pixelCameraHomogenCoord.w = 1;
 
     // Pixel world coordinates
-    res->x = Rt_inv[0] * pixelCameraHomogenCoord.x + Rt_inv[1] * pixelCameraHomogenCoord.y + Rt_inv[2] * pixelCameraHomogenCoord.z + Rt_inv[3] * pixelCameraHomogenCoord.w;
-    res->y = Rt_inv[4] * pixelCameraHomogenCoord.x + Rt_inv[5] * pixelCameraHomogenCoord.y + Rt_inv[6] * pixelCameraHomogenCoord.z + Rt_inv[7] * pixelCameraHomogenCoord.w;
-    res->z = Rt_inv[8] * pixelCameraHomogenCoord.x + Rt_inv[9] * pixelCameraHomogenCoord.y + Rt_inv[10] * pixelCameraHomogenCoord.z + Rt_inv[11] * pixelCameraHomogenCoord.w;
-
+    res->x = Rt_inv[0] * pixelCameraHomogenCoord.x +
+             Rt_inv[1] * pixelCameraHomogenCoord.y +
+             Rt_inv[2] * pixelCameraHomogenCoord.z +
+             Rt_inv[3] * pixelCameraHomogenCoord.w;
+    res->y = Rt_inv[4] * pixelCameraHomogenCoord.x +
+             Rt_inv[5] * pixelCameraHomogenCoord.y +
+             Rt_inv[6] * pixelCameraHomogenCoord.z +
+             Rt_inv[7] * pixelCameraHomogenCoord.w;
+    res->z = Rt_inv[8] * pixelCameraHomogenCoord.x +
+             Rt_inv[9] * pixelCameraHomogenCoord.y +
+             Rt_inv[10] * pixelCameraHomogenCoord.z +
+             Rt_inv[11] * pixelCameraHomogenCoord.w;
 }
 
-__device__ void dummyfloat3(float3* res) {
+__device__ void dummyfloat3(float3 *res) {
     res->x = 1.0;
     res->y = 1.0;
     res->z = 1.0;
-
 }
-__device__ FORCEINLINE_GIPUMA void getPointPixelCoord_cu(
-    float3 point,
-    float* P,
-    float2* res
-) {
+__device__ FORCEINLINE_GIPUMA void getPointPixelCoord_cu(float3 point, float *P,
+                                                         float2 *res) {
     float4 pointHomogenCoord;
     pointHomogenCoord.x = point.x;
     pointHomogenCoord.y = point.y;
@@ -99,14 +107,19 @@ __device__ FORCEINLINE_GIPUMA void getPointPixelCoord_cu(
     pointHomogenCoord.w = 1;
 
     float3 pointCameraCoord;
-    pointCameraCoord.x = P[0] *  pointHomogenCoord.x + P[1] * pointHomogenCoord.y + P[2] * pointHomogenCoord.z + P[3] * pointHomogenCoord.w;
-    pointCameraCoord.y = P[4] *  pointHomogenCoord.x + P[5] * pointHomogenCoord.y + P[6] * pointHomogenCoord.z + P[7] * pointHomogenCoord.w;
-    pointCameraCoord.z = P[8] *  pointHomogenCoord.x + P[9] * pointHomogenCoord.y + P[10] * pointHomogenCoord.z + P[11] * pointHomogenCoord.w;
+    pointCameraCoord.x =
+        P[0] * pointHomogenCoord.x + P[1] * pointHomogenCoord.y +
+        P[2] * pointHomogenCoord.z + P[3] * pointHomogenCoord.w;
+    pointCameraCoord.y =
+        P[4] * pointHomogenCoord.x + P[5] * pointHomogenCoord.y +
+        P[6] * pointHomogenCoord.z + P[7] * pointHomogenCoord.w;
+    pointCameraCoord.z =
+        P[8] * pointHomogenCoord.x + P[9] * pointHomogenCoord.y +
+        P[10] * pointHomogenCoord.z + P[11] * pointHomogenCoord.w;
 
     // Pixel coordinates
     res->x = pointCameraCoord.x / pointCameraCoord.z;
     res->y = pointCameraCoord.y / pointCameraCoord.z;
-    
 }
 
 __device__ FORCEINLINE_GIPUMA void normalize_cu(float3 *__restrict__ v) {
@@ -124,32 +137,29 @@ __device__ FORCEINLINE_GIPUMA void normalize2_cu(float2 *__restrict__ v) {
     v->y *= inverse_sqrt;
 }
 
-
 __device__ FORCEINLINE_GIPUMA static void projectSamplePointIn3D_cu(
-    float2 samplePoint,
-    const float3 pointOnLine,
-    const float3 lineUnitDirection,
-    const float* K_inv,
-    const float* Rt,
-    float3* res
-) {
-
+    float2 samplePoint, const float3 pointOnLine,
+    const float3 lineUnitDirection, const float *K_inv, const float *Rt,
+    float3 *res) {
     float3 pixelHomogenCoord;
     pixelHomogenCoord.x = samplePoint.x;
     pixelHomogenCoord.y = samplePoint.y;
     pixelHomogenCoord.z = 1;
 
-
     float3 pixelCameraCoord;
-    pixelCameraCoord.x = K_inv[0] * pixelHomogenCoord.x + K_inv[1] * pixelHomogenCoord.y + K_inv[2] * pixelHomogenCoord.z;
-    pixelCameraCoord.y = K_inv[3] * pixelHomogenCoord.x + K_inv[4] * pixelHomogenCoord.y + K_inv[5] * pixelHomogenCoord.z;
-    pixelCameraCoord.z = K_inv[6] * pixelHomogenCoord.x + K_inv[7] * pixelHomogenCoord.y + K_inv[8] * pixelHomogenCoord.z;
-
+    pixelCameraCoord.x = K_inv[0] * pixelHomogenCoord.x +
+                         K_inv[1] * pixelHomogenCoord.y +
+                         K_inv[2] * pixelHomogenCoord.z;
+    pixelCameraCoord.y = K_inv[3] * pixelHomogenCoord.x +
+                         K_inv[4] * pixelHomogenCoord.y +
+                         K_inv[5] * pixelHomogenCoord.z;
+    pixelCameraCoord.z = K_inv[6] * pixelHomogenCoord.x +
+                         K_inv[7] * pixelHomogenCoord.y +
+                         K_inv[8] * pixelHomogenCoord.z;
 
     const float t1 = Rt[3];
     const float t2 = Rt[7];
     const float t3 = Rt[11];
-
 
     const float xPrim = pixelCameraCoord.x;
     const float yPrim = pixelCameraCoord.y;
@@ -171,11 +181,15 @@ __device__ FORCEINLINE_GIPUMA static void projectSamplePointIn3D_cu(
 
     float lambda = 0;
     // For some reason brackets are VERY important here!
-    const float d = dot4(r2, lineUnitDirection) - (yPrim * (dot4(r3, lineUnitDirection)));
-    const float n = (yPrim * (dot4(r3, pointOnLine))) + (yPrim * t3) - (dot4(r2, pointOnLine)) - (t2);
-    const float d2 = dot4(r1, lineUnitDirection) - (xPrim * (dot4(r3, lineUnitDirection)));
-    const float n2 = (xPrim * (dot4(r3, pointOnLine))) + (xPrim * t3) - (dot4(r1, pointOnLine)) - (t1);
-    
+    const float d =
+        dot4(r2, lineUnitDirection) - (yPrim * (dot4(r3, lineUnitDirection)));
+    const float n = (yPrim * (dot4(r3, pointOnLine))) + (yPrim * t3) -
+                    (dot4(r2, pointOnLine)) - (t2);
+    const float d2 =
+        dot4(r1, lineUnitDirection) - (xPrim * (dot4(r3, lineUnitDirection)));
+    const float n2 = (xPrim * (dot4(r3, pointOnLine))) + (xPrim * t3) -
+                     (dot4(r1, pointOnLine)) - (t1);
+
     if (abs(d) < 0.001f) {
         lambda = n2 / d2;
     } else {
@@ -187,19 +201,16 @@ __device__ FORCEINLINE_GIPUMA static void projectSamplePointIn3D_cu(
     res->z = lineUnitDirection.z * lambda + pointOnLine.z;
 }
 
-
 template <typename T>
-__device__ FORCEINLINE_GIPUMA void samplePoints_cu(
-    const GlobalState &gs,
-    const int2 pixelCoord,
-    const float depth,
-    const float3 unitDirection,
-    float2 samples[400]
-) {
+__device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
+                                                   const int2 pixelCoord,
+                                                   const float depth,
+                                                   const float3 unitDirection,
+                                                   float2 samples[400]) {
     const int k = gs.params->k;
     const int rk = gs.params->rk;
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
-    int* selectedViewsSubset = gs.cameras->viewSelectionSubset;
+    int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
     const int referenceImageIndex = 0;
     const int u = pixelCoord.x;
     const int v = pixelCoord.y;
@@ -207,27 +218,25 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(
     // correct
     float3 pixelWorldCoord;
     getPixelWorldCoord_cu(
-        pixelCoord,
-        depth,
-        gs.cameras->cameras[referenceImageIndex].K_inv,
+        pixelCoord, depth, gs.cameras->cameras[referenceImageIndex].K_inv,
         gs.cameras->cameras[referenceImageIndex].Rt_extended_inv,
-        &pixelWorldCoord
-    );
+        &pixelWorldCoord);
 
     // correct
     float3 seoncdPointOnLineWorldCoord;
     addout(pixelWorldCoord, unitDirection, seoncdPointOnLineWorldCoord);
-    
+
     // correct
     float2 seoncdPointPixelCoord;
-    getPointPixelCoord_cu(seoncdPointOnLineWorldCoord, gs.cameras->cameras[referenceImageIndex].P, &seoncdPointPixelCoord);
+    getPointPixelCoord_cu(seoncdPointOnLineWorldCoord,
+                          gs.cameras->cameras[referenceImageIndex].P,
+                          &seoncdPointPixelCoord);
 
-    
     // correct
     float2 lineInReferenceImageUnitDirection;
-    subout2(pixelCoord, seoncdPointPixelCoord, lineInReferenceImageUnitDirection);
-    
-    
+    subout2(pixelCoord, seoncdPointPixelCoord,
+            lineInReferenceImageUnitDirection);
+
     // correct
     normalize2_cu(&lineInReferenceImageUnitDirection);
 
@@ -238,8 +247,10 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(
     for (int i = -k / 2; i <= k / 2; i++) {
         float scale = 2 * i * rk / k;
 
-        samplesInReferenceView[sampleIdx].x = pixelCoord.x + scale * lineInReferenceImageUnitDirection.x;
-        samplesInReferenceView[sampleIdx].y = pixelCoord.y + scale * lineInReferenceImageUnitDirection.y;
+        samplesInReferenceView[sampleIdx].x =
+            pixelCoord.x + scale * lineInReferenceImageUnitDirection.x;
+        samplesInReferenceView[sampleIdx].y =
+            pixelCoord.y + scale * lineInReferenceImageUnitDirection.y;
 
         sampleIdx += 1;
     }
@@ -248,121 +259,128 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(
         float2 samplePixel = samplesInReferenceView[j];
         // correct
         float3 sampleWorldCoord;
-        projectSamplePointIn3D_cu(samplePixel, pixelWorldCoord, unitDirection, gs.cameras->cameras[referenceImageIndex].K_inv, gs.cameras->cameras[referenceImageIndex].Rt, &sampleWorldCoord);
-        
+        projectSamplePointIn3D_cu(
+            samplePixel, pixelWorldCoord, unitDirection,
+            gs.cameras->cameras[referenceImageIndex].K_inv,
+            gs.cameras->cameras[referenceImageIndex].Rt, &sampleWorldCoord);
+
         for (int i = 0; i < selectedViewsNumber; i++) {
             int cameraIdx = selectedViewsSubset[i];
 
             // correct
             float2 samplePixelInImageI;
-            getPointPixelCoord_cu(sampleWorldCoord, gs.cameras->cameras[cameraIdx].P, &samplePixelInImageI);
+            getPointPixelCoord_cu(sampleWorldCoord,
+                                  gs.cameras->cameras[cameraIdx].P,
+                                  &samplePixelInImageI);
             samples[i * k + j] = samplePixelInImageI;
         }
     }
-
 }
-
-
 
 template <typename T>
 __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
-    const GlobalState &gs,
-    const int2 pixelCoord,
-    const float depth,
-    const float3 unitDirection
-) {
-        float cost = 0.f;
-        // TODO: remove check
-        if(pixelCoord.x != 196 || pixelCoord.y != 1225) {
-            return cost;
-        }
-        
-        const int k = gs.params->k;
-        float2 samples[400];
+    const GlobalState &gs, const int2 pixelCoord, const float depth,
+    const float3 unitDirection) {
+    float cost = 0.f;
+    // TODO: remove check
+    if (pixelCoord.x != 196 || pixelCoord.y != 1225) {
+        return cost;
+    }
 
-        samplePoints_cu<T>(gs, pixelCoord, depth, unitDirection, samples);
+    const int k = gs.params->k;
+    float2 samples[400];
 
-        for (int j = 0; j < 1; j++){
-            printf("after j: %d x:%f y:%f\n", j, samples[j].x, samples[j].y);
-        }
-        // TODO: compute geometric cost
-        float geometricCost = 0.f;
+    samplePoints_cu<T>(gs, pixelCoord, depth, unitDirection, samples);
 
-        // TODO: compute intensity cost
-        float intensityCost = 0.f; 
-        const int rk = gs.params->rk;
-        const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
-        int* selectedViewsSubset = gs.cameras->viewSelectionSubset;
-        const int referenceImageIndex = 0;
-        const int rows = gs.cameras->rows;
-        const int cols = gs.cameras->cols;
+    for (int j = 0; j < 1; j++) {
+        printf("after j: %d x:%f y:%f\n", j, samples[j].x, samples[j].y);
+    }
+    // TODO: compute geometric cost
+    float geometricCost = 0.f;
 
-        const cudaTextureObject_t referenceImg = gs.imgs[referenceImageIndex];
+    // TODO: compute intensity cost
+    float intensityCost = 0.f;
+    const int rk = gs.params->rk;
+    const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
+    int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
+    const int referenceImageIndex = 0;
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
 
-        for (int i = 1; i < selectedViewsNumber; i++) {
-            int cameraIdx = selectedViewsSubset[i];
-            const cudaTextureObject_t otherImg = gs.imgs[cameraIdx];
-            float numerator = 0.f;
-            float denominator1 = 0;
-            float denominator2 = 0;
-            float referenceImageIntensitySum = 0.f;
-            float otherImageIntensitySum = 0.f;
-            float validSamples = 0.f;
+    const cudaTextureObject_t referenceImg = gs.imgs[referenceImageIndex];
 
-            for (int j = 0; j < k; j++){
-                if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols || samples[j].y >= rows) {
-                    continue;
-                }
+    for (int i = 1; i < selectedViewsNumber; i++) {
+        int cameraIdx = selectedViewsSubset[i];
+        const cudaTextureObject_t otherImg = gs.imgs[cameraIdx];
+        float numerator = 0.f;
+        float denominator1 = 0;
+        float denominator2 = 0;
+        float referenceImageIntensitySum = 0.f;
+        float otherImageIntensitySum = 0.f;
+        float validSamples = 0.f;
 
-                if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
-                    samples[i * k + j].x >= cols || samples[i * k + j].y >= rows
-                ) {
-                    continue;
-                }
-                validSamples += 1;
-                referenceImageIntensitySum += texat(referenceImg, samples[j].x, samples[j].y);
-                otherImageIntensitySum += texat(otherImg, samples[i * k + j].x, samples[i * k + j].y);
-            }
-
-            if(validSamples == 0 ){
-                // What to do here?
-                intensityCost += 1000.f;
-                printf("WARNING! validSamples is 0\n");
+        for (int j = 0; j < k; j++) {
+            if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
+                samples[j].y >= rows) {
                 continue;
             }
-            const float referenceImageIntensityMean = referenceImageIntensitySum / validSamples;
-            const float otherImageIntensityMean = otherImageIntensitySum / validSamples;
 
-            for (int j = 0; j < k; j++){
-                if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols || samples[j].y >= rows) {
-                    continue;
-                }
-
-                if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
-                    samples[i * k + j].x >= cols || samples[i * k + j].y >= rows
-                ) {
-                    continue;
-                }
-                float intensityReference = texat(referenceImg, samples[j].x, samples[j].y) - referenceImageIntensityMean;
-                float intensityOther = texat(otherImg, samples[i * k + j].x, samples[i * k + j].y) - otherImageIntensityMean;
-
-                numerator += intensityReference * intensityOther;
-                denominator1 += intensityOther * intensityOther;
-                denominator2 += intensityReference * intensityReference;
+            if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
+                samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
+                continue;
             }
-            float denominator = denominator1 * denominator2;
-            if(denominator == 0) {
-                // What to do here?
-                intensityCost += 1000.f;
-                printf("WARNING! denominator is 0\n");
-            } else {
-                float correlation = numerator / denominator;
-                intensityCost += correlation;
-            }
+            validSamples += 1;
+            referenceImageIntensitySum +=
+                texat(referenceImg, samples[j].x, samples[j].y);
+            otherImageIntensitySum +=
+                texat(otherImg, samples[i * k + j].x, samples[i * k + j].y);
         }
-        float alpha = 0.1;
-        cost = (1 - alpha) * geometricCost + alpha * intensityCost;
-        return cost;
+
+        if (validSamples == 0) {
+            // What to do here?
+            intensityCost += 1000.f;
+            printf("WARNING! validSamples is 0\n");
+            continue;
+        }
+        const float referenceImageIntensityMean =
+            referenceImageIntensitySum / validSamples;
+        const float otherImageIntensityMean =
+            otherImageIntensitySum / validSamples;
+
+        for (int j = 0; j < k; j++) {
+            if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
+                samples[j].y >= rows) {
+                continue;
+            }
+
+            if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
+                samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
+                continue;
+            }
+            float intensityReference =
+                texat(referenceImg, samples[j].x, samples[j].y) -
+                referenceImageIntensityMean;
+            float intensityOther =
+                texat(otherImg, samples[i * k + j].x, samples[i * k + j].y) -
+                otherImageIntensityMean;
+
+            numerator += intensityReference * intensityOther;
+            denominator1 += intensityOther * intensityOther;
+            denominator2 += intensityReference * intensityReference;
+        }
+        float denominator = denominator1 * denominator2;
+        if (denominator == 0) {
+            // What to do here?
+            intensityCost += 1000.f;
+            printf("WARNING! denominator is 0\n");
+        } else {
+            float correlation = numerator / denominator;
+            intensityCost += correlation;
+        }
+    }
+    float alpha = 0.1;
+    cost = (1 - alpha) * geometricCost + alpha * intensityCost;
+    return cost;
 }
 
 template <typename T>
@@ -391,12 +409,8 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
     gs.lines->depth[center] = curand_between(&localState, mind, maxd);
     // gs.lines->depth[center] = 1.0675795;
 
-    gs.lines->lineCost[center] =  pmCostMultiview_cu<T>(
-        gs,
-        p,
-        gs.lines->depth[center],
-        gs.lines->unitDirection[center]
-    );
+    gs.lines->lineCost[center] = pmCostMultiview_cu<T>(
+        gs, p, gs.lines->depth[center], gs.lines->unitDirection[center]);
     return;
 }
 
