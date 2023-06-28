@@ -196,7 +196,6 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(
     const float3 unitDirection,
     float2 samples[400]
 ) {
-
     const int k = gs.params->k;
     const int rk = gs.params->rk;
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
@@ -232,7 +231,6 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(
     // correct
     normalize2_cu(&lineInReferenceImageUnitDirection);
 
-    
     // correct
     float2 samplesInReferenceView[50];
     int sampleIdx = 0;
@@ -496,8 +494,8 @@ __global__ void gipuma_red_lineRefine_cu(GlobalState &gs) {
     // gipuma_checkerboard_lineRefinement_cu<T>(gs, p, tile_offset, iter);
 }
 
-float printTotalCost(GlobalState gs) {
-    float c = 0;
+float printTotalCost(GlobalState &gs) {
+    float c = 0.f;
     printf("gs.cameras->rows: %d\n", gs.cameras->rows);
     printf("gs.cameras->cols: %d\n", gs.cameras->cols);
     for (int i = 0; i < gs.cameras->rows; i++) {
