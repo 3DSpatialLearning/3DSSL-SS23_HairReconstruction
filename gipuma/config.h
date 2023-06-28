@@ -64,12 +64,20 @@ v[2] = v[2] / k;
                    v->y = -v->y; \
                    v->z = -v->z;
 
+#define addout(v0,v1, vout) vout.x = v0.x + v1.x; \
+                   vout.y = v0.y + v1.y; \
+                   vout.z = v0.z + v1.z;
+
 #define sub(v0,v1) v0.x = v0.x - v1.x; \
                    v0.y = v0.y - v1.y; \
                    v0.z = v0.z - v1.z;
 #define subout(v0,v1,vout) vout.x = v0.x - v1.x; \
                    vout.y = v0.y - v1.y; \
                    vout.z = v0.z - v1.z;
+
+#define subout2(v0,v1,vout) vout.x = v0.x - v1.x; \
+                   vout.y = v0.y - v1.y;
+
 
 #define outer_product(v0,v1, out) \
 out[0] = v0[0] * v1[0]; \
