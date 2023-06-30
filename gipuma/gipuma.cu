@@ -212,8 +212,6 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
     int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
     const int referenceImageIndex = 0;
-    const int u = pixelCoord.x;
-    const int v = pixelCoord.y;
 
     // correct
     float3 pixelWorldCoord;
@@ -222,41 +220,56 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
         gs.cameras->cameras[referenceImageIndex].Rt_extended_inv,
         &pixelWorldCoord);
 
+    // printf("pixelWorldCoord %f %f %f \n", pixelWorldCoord.x, pixelWorldCoord.y, pixelWorldCoord.z);
     // correct
     float3 seoncdPointOnLineWorldCoord;
+
     addout(pixelWorldCoord, unitDirection, seoncdPointOnLineWorldCoord);
+    // printf("seoncdPointOnLineWorldCoord %f %f %f \n", seoncdPointOnLineWorldCoord.x, seoncdPointOnLineWorldCoord.y, seoncdPointOnLineWorldCoord.z);
 
     // correct
     float2 seoncdPointPixelCoord;
     getPointPixelCoord_cu(seoncdPointOnLineWorldCoord,
                           gs.cameras->cameras[referenceImageIndex].P,
                           &seoncdPointPixelCoord);
+    // printf("seoncdPointPixelCoord %f %f \n", seoncdPointPixelCoord.x, seoncdPointPixelCoord.y);
 
     // correct
     float2 lineInReferenceImageUnitDirection;
     subout2(pixelCoord, seoncdPointPixelCoord,
             lineInReferenceImageUnitDirection);
+    // printf("lineInReferenceImageUnitDirection %f %f \n", lineInReferenceImageUnitDirection.x, lineInReferenceImageUnitDirection.y);
 
     // correct
     normalize2_cu(&lineInReferenceImageUnitDirection);
+    // printf("normalized lineInReferenceImageUnitDirection %f %f \n", lineInReferenceImageUnitDirection.x, lineInReferenceImageUnitDirection.y);
 
     // correct
-    float2 samplesInReferenceView[50];
+    // float2 samplesInReferenceView[50];
     int sampleIdx = 0;
 
     for (int i = -k / 2; i <= k / 2; i++) {
-        float scale = 2 * i * rk / k;
 
-        samplesInReferenceView[sampleIdx].x =
+       float scale = 2 * (float)i * (float)rk / (float)k;
+
+        samples[sampleIdx].x =
             pixelCoord.x + scale * lineInReferenceImageUnitDirection.x;
-        samplesInReferenceView[sampleIdx].y =
+        samples[sampleIdx].y =
             pixelCoord.y + scale * lineInReferenceImageUnitDirection.y;
 
+        // samplesInReferenceView[sampleIdx].x =
+        //     pixelCoord.x + scale * lineInReferenceImageUnitDirection.x;
+        // samplesInReferenceView[sampleIdx].y =
+        //     pixelCoord.y + scale * lineInReferenceImageUnitDirection.y;
+        // printf("cuda samplesInReferenceView %d, %f %f %f \n", i, scale, samplesInReferenceView[sampleIdx].x, samplesInReferenceView[sampleIdx].y);
+
+        // samples[sampleIdx].x = samplesInReferenceView[sampleIdx].x;
+        // samples[sampleIdx].y = samplesInReferenceView[sampleIdx].y;
         sampleIdx += 1;
     }
 
     for (int j = 0; j < k; j++) {
-        float2 samplePixel = samplesInReferenceView[j];
+        float2 samplePixel = samples[j];
         // correct
         float3 sampleWorldCoord;
         projectSamplePointIn3D_cu(
@@ -264,8 +277,10 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
             gs.cameras->cameras[referenceImageIndex].K_inv,
             gs.cameras->cameras[referenceImageIndex].Rt, &sampleWorldCoord);
 
-        for (int i = 0; i < selectedViewsNumber; i++) {
+        for (int i = 1; i < selectedViewsNumber + 1; i++) {
             int cameraIdx = selectedViewsSubset[i];
+
+            // printf("cuda i %d, cameraIdx %d \n", i, cameraIdx);
 
             // correct
             float2 samplePixelInImageI;
@@ -278,116 +293,272 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
 }
 
 template <typename T>
-__device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
-    const GlobalState &gs, const int2 pixelCoord, const float depth,
-    const float3 unitDirection) {
-    float cost = 0.f;
-    // TODO: remove check
-    if (pixelCoord.x != 196 || pixelCoord.y != 1225) {
-        return cost;
+__device__ FORCEINLINE_GIPUMA static float angularDiff_cu(
+    const float2 lineDirection, const float orientationAngle) {
+    float lineDirectionX = lineDirection.x;
+    float lineDirectionY = lineDirection.y;
+
+    if (lineDirectionY < 0) {
+        lineDirectionY = lineDirectionY * (-1);
+        lineDirectionX = lineDirectionX * (-1);
     }
 
+    float lineAngle = atan2(lineDirectionY, lineDirectionX);
+    float angleDiff = abs(lineAngle - orientationAngle);
+
+    return angleDiff;
+}
+
+template <typename T>
+__device__ FORCEINLINE_GIPUMA static int validViewsCount_cu(
+    const GlobalState &gs, const float2 samples[400]) {
     const int k = gs.params->k;
-    float2 samples[400];
-
-    samplePoints_cu<T>(gs, pixelCoord, depth, unitDirection, samples);
-
-    for (int j = 0; j < 1; j++) {
-        printf("after j: %d x:%f y:%f\n", j, samples[j].x, samples[j].y);
-    }
-    // TODO: compute geometric cost
-    float geometricCost = 0.f;
-
-    // TODO: compute intensity cost
-    float intensityCost = 0.f;
-    const int rk = gs.params->rk;
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
-    int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
+    // const int referenceImageIndex = 0;
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
+
+    int validViewsCount = 0;
+    for (int i = 0; i < selectedViewsNumber; i++) {
+        int validSamplesCount = 0;
+
+        for (int j = 0; j < k; j++) {
+            if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
+                samples[j].y >= rows) {
+                continue;
+            }
+
+            if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
+                samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
+                continue;
+            }
+            validSamplesCount++;
+        }
+
+        if (validSamplesCount == 0) {
+            // printf("WARNING valid sample count is 0!\n");
+            continue;
+        }
+        validViewsCount++;
+    }
+
+    return validViewsCount;
+}
+template <typename T>
+__device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
+    const GlobalState &gs, const float2 samples[400], const int cameraIdx, const int samplesRowIdx) {
+    const int k = gs.params->k;
+
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
+
+    const cudaTextureObject_t imgOrient = gs.orientaionMap[cameraIdx];
+    const cudaTextureObject_t imgConf = gs.confidenceValue[cameraIdx];
+
+    float geometricCost = 0.f;
+    float confidenceValuesSum = 0.f;
+
+    float2 lineDirection;
+    lineDirection.x = samples[samplesRowIdx * k + k - 1].x - samples[samplesRowIdx * k].x;
+    lineDirection.y = samples[samplesRowIdx * k + k - 1].y - samples[samplesRowIdx * k].y;
+    int validSamplesCount = 0;
+    for (int j = 0; j < k; j++) {
+        if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
+            samples[j].y >= rows) {
+            continue;
+        }
+
+        if (samples[samplesRowIdx * k + j].x < 0 || samples[samplesRowIdx * k + j].y < 0 ||
+            samples[samplesRowIdx * k + j].x >= cols || samples[samplesRowIdx * k + j].y >= rows) {
+            continue;
+        }
+
+        validSamplesCount++;
+        const float orientaion = texat(imgOrient, samples[samplesRowIdx * k + j].x, samples[samplesRowIdx * k + j].y);
+        const float confidence = texat(imgConf, samples[samplesRowIdx * k + j].x, samples[samplesRowIdx * k + j].y);
+
+        confidenceValuesSum += confidence;
+
+        geometricCost += confidence * angularDiff_cu<T>(lineDirection, orientaion);
+    }
+
+    if (confidenceValuesSum == 0) {
+        // printf("WARNING confidenceValuesSum is 0!\n");
+        return 1000.f;
+    }
+
+    geometricCost /= confidenceValuesSum;
+    return geometricCost;
+}
+
+template <typename T>
+__device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
+    const GlobalState &gs, const float2 samples[400], const int cameraIdx, const int samplesRowIdx) {
+    const int k = gs.params->k;
+    float intensityCost = 0.f;
+
     const int referenceImageIndex = 0;
     const int rows = gs.cameras->rows;
     const int cols = gs.cameras->cols;
 
     const cudaTextureObject_t referenceImg = gs.imgs[referenceImageIndex];
+    const int i = samplesRowIdx;
+    const cudaTextureObject_t otherImg = gs.imgs[cameraIdx];
+    float referenceImageIntensitySum = 0.f;
+    float otherImageIntensitySum = 0.f;
+    int validSamples = 0;
 
-    int validViewsCount = 0;
-    for (int i = 1; i < selectedViewsNumber; i++) {
-        int cameraIdx = selectedViewsSubset[i];
-        const cudaTextureObject_t otherImg = gs.imgs[cameraIdx];
-        float numerator = 0.f;
-        float denominator1 = 0;
-        float denominator2 = 0;
-        float referenceImageIntensitySum = 0.f;
-        float otherImageIntensitySum = 0.f;
-        float validSamples = 0.f;
-
-        for (int j = 0; j < k; j++) {
-            if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
-                samples[j].y >= rows) {
-                continue;
-            }
-
-            if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
-                samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
-                continue;
-            }
-            validSamples += 1;
-            referenceImageIntensitySum +=
-                texat(referenceImg, samples[j].x, samples[j].y);
-            otherImageIntensitySum +=
-                texat(otherImg, samples[i * k + j].x, samples[i * k + j].y);
-        }
-
-        if (validSamples == 0) {
-            // What to do here?
-            intensityCost += 1000.f;
-            printf("WARNING! validSamples is 0\n");
+    for (int j = 0; j < k; j++) {
+        if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
+            samples[j].y >= rows) {
             continue;
-        } else {
-            validViewsCount += 1;
         }
-        const float referenceImageIntensityMean =
-            referenceImageIntensitySum / validSamples;
-        const float otherImageIntensityMean =
-            otherImageIntensitySum / validSamples;
 
-        for (int j = 0; j < k; j++) {
-            if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
-                samples[j].y >= rows) {
-                continue;
-            }
-
-            if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
-                samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
-                continue;
-            }
-            float intensityReference =
-                texat(referenceImg, samples[j].x, samples[j].y) -
-                referenceImageIntensityMean;
-            float intensityOther =
-                texat(otherImg, samples[i * k + j].x, samples[i * k + j].y) -
-                otherImageIntensityMean;
-
-            numerator += intensityReference * intensityOther;
-            denominator1 += intensityOther * intensityOther;
-            denominator2 += intensityReference * intensityReference;
+        if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
+            samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
+            continue;
         }
-        float denominator = denominator1 * denominator2;
-        if (denominator == 0) {
-            // What to do here?
-            intensityCost += 1000.f;
-            printf("WARNING! denominator is 0\n");
-        } else {
-            float correlation = numerator / denominator;
-            intensityCost += correlation;
-        }
+        validSamples += 1;
+        referenceImageIntensitySum += (texat(referenceImg, samples[j].x, samples[j].y));
+        otherImageIntensitySum += (texat(otherImg, samples[i * k + j].x, samples[i * k + j].y));
     }
-    if (validViewsCount == 0) {
+
+    if (validSamples == 0) {
         // What to do here?
-        intensityCost = 1000.f;
-        printf("WARNING! valid views count is 0\n");
+        intensityCost = MAXCOST;
+        // printf("WARNING! validSamples is 0\n");
+        return intensityCost;
+    }
+
+    const float referenceImageIntensityMean =
+        referenceImageIntensitySum / validSamples;
+    const float otherImageIntensityMean =
+        otherImageIntensitySum / validSamples;
+
+    float numerator = 0.f;
+    float denominator1 = 0.f;
+    float denominator2 = 0.f;
+    for (int j = 0; j < k; j++) {
+        if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
+            samples[j].y >= rows) {
+            continue;
+        }
+
+        if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
+            samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
+            continue;
+        }
+        float intensityReference = texat(referenceImg, samples[j].x, samples[j].y) - referenceImageIntensityMean;
+        float intensityOther = texat(otherImg, samples[i * k + j].x, samples[i * k + j].y) - otherImageIntensityMean;
+
+        numerator += (intensityReference * intensityOther);
+        denominator1 += (intensityOther * intensityOther);
+        denominator2 += (intensityReference * intensityReference);
+    }
+    float denominator = sqrtf(denominator1 * denominator2);
+    float corelation;
+    if (denominator < 0.001) {
+        // What to do here?
+        // printf("WARNING! denominator is 0\n");
+        corelation = 1.f;
+    }  else {
+        corelation = numerator / denominator;
+
+    }
+
+    intensityCost = (1 - corelation) / (float)validSamples;
+
+    return intensityCost;
+}
+
+static __device__ FORCEINLINE_GIPUMA void sort_small(float *__restrict__ d,
+                                                     const int n) {
+    int j;
+    for (int i = 1; i < n; i++) {
+        float tmp = d[i];
+        for (j = i; j >= 1 && tmp < d[j - 1]; j--) d[j] = d[j - 1];
+        d[j] = tmp;
+    }
+}
+
+template <typename T>
+__device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
+    const GlobalState &gs, const int2 pixelCoord, const float depth,
+    const float3 unitDirection) {
+
+    const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
+    int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
+
+    // if(pixelCoord.x != 196 || pixelCoord.y  != 1225) {
+    //     return;
+    // }
+
+    float2 samples[400];
+    samplePoints_cu<T>(gs, pixelCoord, depth, unitDirection, samples);
+
+    // for (int i =0 ; i< gs.params->k; i++) {
+    //     printf("cuda %d %f %f \n", i, samples[i].x, samples[i].y);
+    // }
+
+
+    const int validViewsCount = validViewsCount_cu<T>(gs, samples);
+
+
+    if (validViewsCount == 0) {
+        printf("WARNING valid view count is 0!\n");
+        printf("WARNING valid view count is 0!\n");
+        printf("WARNING valid view count is 0!\n");
+        return MAXCOST;
+    }
+
+    float geometricCosts[20];
+    const float geometricCostRefImage = geometricCost_cu<T>(gs, samples, 0, 0);
+    for (int i = 0; i < selectedViewsNumber; i++) {
+        int cameraIdx = selectedViewsSubset[i];
+        geometricCosts[i] = geometricCost_cu<T>(gs, samples, cameraIdx, i);
+    }
+
+    sort_small(geometricCosts, selectedViewsNumber);
+
+    int numBest = validViewsCount; 
+    if (gs.params->cost_comb == COMB_BEST_N)
+        numBest = min(numBest, gs.params->n_best);
+
+    float totalGeometricCost = 0.f;
+    totalGeometricCost += numBest * geometricCostRefImage;
+    for (int i = 0; i < numBest; i++) {
+        totalGeometricCost += geometricCosts[i];
+    }
+    totalGeometricCost = totalGeometricCost / (2*(float)numBest);
+
+    if(totalGeometricCost < -0.01f) {
+        printf("geometric cost is less than 0! %f", totalGeometricCost);
+    }
+
+// TODO: compute
+    float intensityCosts[20];
+
+    for (int i = 0; i < selectedViewsNumber; i++) {
+        int cameraIdx = selectedViewsSubset[i];
+        intensityCosts[i] = intensityCost_cu<T>(gs, samples, cameraIdx, i);
+    }
+
+    sort_small(intensityCosts, selectedViewsNumber);
+
+    float totalIntensityCost = 0.f;
+    for (int i = 0; i < numBest; i++) {
+        totalIntensityCost += intensityCosts[i];
+    }
+    totalIntensityCost = totalIntensityCost / ((float)numBest);
+
+
+    if(totalIntensityCost < -0.01f) {
+        printf("inten cost is less than 0! %f", totalIntensityCost);
     }
     float alpha = 0.1;
-    cost = (1 - alpha) * geometricCost + alpha * intensityCost;
+    float cost = (1 - alpha) * totalGeometricCost + alpha * totalIntensityCost;
+
+    // printf("geom %f int %f  total %f \n", geometricCost, intensityCost, cost);
     return cost;
 }
 
@@ -406,6 +577,7 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
 
     float3 generatedUnitDir;
     rndUnitVectorSphereMarsaglia_cu(&generatedUnitDir, &localState);
+
     gs.lines->unitDirection[center] = generatedUnitDir;
     // gs.lines->unitDirection[center].x = -0.12800153;
     // gs.lines->unitDirection[center].y = -0.68858582;
@@ -414,6 +586,7 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
     // use disparity instead of depth?
     float mind = gs.params->depthMin;
     float maxd = gs.params->depthMax;
+
     gs.lines->depth[center] = curand_between(&localState, mind, maxd);
     // gs.lines->depth[center] = 1.0675795;
 
@@ -423,111 +596,249 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
 }
 
 template <typename T>
+__device__ FORCEINLINE_GIPUMA void lineRefinement_cu(GlobalState &gs,
+                                                         int2 referencePixel) {
+    const int cols = gs.cameras->cols;
+
+    float mind = gs.params->depthMin;
+    float maxd = gs.params->depthMax;
+
+    const int center = referencePixel.y * cols + referencePixel.x;
+    curandState localState = gs.cs[center];
+
+    const float maxdisp = gs.params->max_disparity / 2.0f;  // temp variable
+    for (float deltaZ = maxdisp; deltaZ >= 0.01f; deltaZ = deltaZ / 10.0f) {    
+        float3 newDir;
+        rndUnitVectorSphereMarsaglia_cu(&newDir, &localState);
+
+
+        float newDepth = curand_between(&localState, mind, maxd);
+
+        float newCost = pmCostMultiview_cu<T>(gs, referencePixel, newDepth, newDir);
+
+        if (newCost < gs.lines->lineCost[center]) {
+            gs.lines->depth[center] = newDepth;
+            gs.lines->unitDirection[center].x = newDir.x;
+            gs.lines->unitDirection[center].y = newDir.y;
+            gs.lines->unitDirection[center].z = newDir.z;
+            gs.lines->lineCost[center] = newCost;
+        }
+    }
+    
+    return;
+}
+
+template <typename T>
+__device__ FORCEINLINE_GIPUMA void spatialPropagation_cu(GlobalState &gs,
+                                                         int2 referencePixel,
+                                                         int2 otherPixel) {
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
+
+    if (otherPixel.x < 0 || otherPixel.x >= cols) return;
+    if (otherPixel.y < 0 || otherPixel.y >= rows) return;
+
+    const int center = referencePixel.y * cols + referencePixel.x;
+    const int otherCenter = otherPixel.y * cols + otherPixel.x;
+
+    // TODO: compute new depth
+    float newDepth = gs.lines->depth[otherCenter];
+    float3 newDir = gs.lines->unitDirection[otherCenter];
+
+    float newCost = pmCostMultiview_cu<T>(gs, referencePixel, newDepth, newDir);
+
+    if (newCost < gs.lines->lineCost[center]) {
+        gs.lines->depth[center] = newDepth;
+        gs.lines->unitDirection[center].x = newDir.x;
+        gs.lines->unitDirection[center].y = newDir.y;
+        gs.lines->unitDirection[center].z = newDir.z;
+        gs.lines->lineCost[center] = newCost;
+    }
+    return;
+}
+template <typename T>
 __global__ void gipuma_black_spatialPropClose_cu(GlobalState &gs) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
-    if (threadIdx.x % 2 == 0)
-        p.y = p.y * 2;
-    else
-        p.y = p.y * 2 + 1;
-    printf("gipuma_black_spatialPropClose_cu x, y: %d %d \n", p.x, p.y);
-    int2 tile_offset;
-    tile_offset.x = blockIdx.x * blockDim.x - WIN_RADIUS_W;
-    tile_offset.y = 2.0 * blockIdx.y * blockDim.y - WIN_RADIUS_H;
-    // gipuma_checkerboard_spatialPropClose_cu<T>(gs, p, tile_offset, iter);
+    if ((p.x  + p.y) % 2 == 0) {
+        return;
+    }
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
+
+    if (p.x >= cols) return;
+    if (p.y >= rows) return;
+
+    // Left
+    int2 left;
+    left.x = p.x - 1;
+    left.y = p.y;
+    // Up
+    int2 up;
+    up.x = p.x;
+    up.y = p.y - 1;
+    // Down
+    int2 down;
+    down.x = p.x;
+    down.y = p.y + 1;
+    // Right
+    int2 right;
+    right.x = p.x + 1;
+    right.y = p.y;
+
+    spatialPropagation_cu<T>(gs, p, left);
+    spatialPropagation_cu<T>(gs, p, up);
+    spatialPropagation_cu<T>(gs, p, down);
+    spatialPropagation_cu<T>(gs, p, right);
 }
 
 template <typename T>
 __global__ void gipuma_black_spatialPropFar_cu(GlobalState &gs) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
-    if (threadIdx.x % 2 == 0)
-        p.y = p.y * 2;
-    else
-        p.y = p.y * 2 + 1;
-    int2 tile_offset;
-    tile_offset.x = blockIdx.x * blockDim.x - WIN_RADIUS_W;
-    tile_offset.y = 2.0 * blockIdx.y * blockDim.y - WIN_RADIUS_H;
-    printf("gipuma_black_spatialPropFar_cu x, y: %d %d \n", p.x, p.y);
-    // gipuma_checkerboard_spatialPropFar_cu<T>(gs, p, tile_offset, iter);
+    if ((p.x  + p.y) % 2 == 0) {
+        return;
+    }
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
+
+    if (p.x >= cols) return;
+    if (p.y >= rows) return;
+
+    // Left
+    int2 left;
+    left.x = p.x - 5;
+    left.y = p.y;
+    // Up
+    int2 up;
+    up.x = p.x;
+    up.y = p.y - 5 * cols;
+    // Down
+    int2 down;
+    down.x = p.x;
+    down.y = p.y + 5 * cols;
+    // Right
+    int2 right;
+    right.x = p.x + 5;
+    right.y = p.y;
+
+    spatialPropagation_cu<T>(gs, p, left);
+    spatialPropagation_cu<T>(gs, p, up);
+    spatialPropagation_cu<T>(gs, p, down);
+    spatialPropagation_cu<T>(gs, p, right);
 }
 
 template <typename T>
 __global__ void gipuma_black_lineRefine_cu(GlobalState &gs) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
-    if (threadIdx.x % 2 == 0)
-        p.y = p.y * 2;
-    else
-        p.y = p.y * 2 + 1;
-    int2 tile_offset;
-    tile_offset.x = blockIdx.x * blockDim.x - WIN_RADIUS_W;
-    tile_offset.y = 2.0 * blockIdx.y * blockDim.y - WIN_RADIUS_H;
-    printf("gipuma_black_lineRefine_cu x, y: %d %d \n", p.x, p.y);
+    if ((p.x  + p.y) % 2 == 0) {
+        return;
+    }
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
 
-    // gipuma_checkerboard_lineRefinement_cu<T>(gs, p, tile_offset, iter);
+    if (p.x >= cols) return;
+    if (p.y >= rows) return;
+    lineRefinement_cu<T>(gs, p);
 }
 
 template <typename T>
 __global__ void gipuma_red_spatialPropClose_cu(GlobalState &gs) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
-    if (threadIdx.x % 2 == 0)
-        p.y = p.y * 2 + 1;
-    else
-        p.y = p.y * 2;
-    int2 tile_offset;
-    tile_offset.x = blockIdx.x * blockDim.x - WIN_RADIUS_W;
-    tile_offset.y = 2.0 * blockIdx.y * blockDim.y - WIN_RADIUS_H;
-    printf("gipuma_red_spatialPropClose_cu x, y: %d %d \n", p.x, p.y);
+    if ((p.x  + p.y) % 2 == 1) {
+        return;
+    }
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
 
-    // gipuma_checkerboard_spatialPropClose_cu<T>(gs, p, tile_offset, iter);
+    if (p.x >= cols) return;
+    if (p.y >= rows) return;
+    int2 left;
+    left.x = p.x - 1;
+    left.y = p.y;
+    // Up
+    int2 up;
+    up.x = p.x;
+    up.y = p.y - 1;
+    // Down
+    int2 down;
+    down.x = p.x;
+    down.y = p.y + 1;
+    // Right
+    int2 right;
+    right.x = p.x + 1;
+    right.y = p.y;
+
+    spatialPropagation_cu<T>(gs, p, left);
+    spatialPropagation_cu<T>(gs, p, up);
+    spatialPropagation_cu<T>(gs, p, down);
+    spatialPropagation_cu<T>(gs, p, right);
 }
 
 template <typename T>
 __global__ void gipuma_red_spatialPropFar_cu(GlobalState &gs) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
-    if (threadIdx.x % 2 == 0)
-        p.y = p.y * 2 + 1;
-    else
-        p.y = p.y * 2;
-    int2 tile_offset;
-    tile_offset.x = blockIdx.x * blockDim.x - WIN_RADIUS_W;
-    tile_offset.y = 2.0 * blockIdx.y * blockDim.y - WIN_RADIUS_H;
-    printf("gipuma_red_spatialPropFar_cu x, y: %d %d \n", p.x, p.y);
+    if ((p.x  + p.y) % 2 == 1) {
+        return;
+    }
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
 
-    // gipuma_checkerboard_spatialPropFar_cu<T>(gs, p, tile_offset, iter);
+    if (p.x >= cols) return;
+    if (p.y >= rows) return;
+
+    // Left
+    int2 left;
+    left.x = p.x - 5;
+    left.y = p.y;
+    // Up
+    int2 up;
+    up.x = p.x;
+    up.y = p.y - 5 * cols;
+    // Down
+    int2 down;
+    down.x = p.x;
+    down.y = p.y + 5 * cols;
+    // Right
+    int2 right;
+    right.x = p.x + 5;
+    right.y = p.y;
+
+    spatialPropagation_cu<T>(gs, p, left);
+    spatialPropagation_cu<T>(gs, p, up);
+    spatialPropagation_cu<T>(gs, p, down);
+    spatialPropagation_cu<T>(gs, p, right);
 }
 
 template <typename T>
 __global__ void gipuma_red_lineRefine_cu(GlobalState &gs) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
-    if (threadIdx.x % 2 == 0)
-        p.y = p.y * 2 + 1;
-    else
-        p.y = p.y * 2;
-    int2 tile_offset;
-    tile_offset.x = blockIdx.x * blockDim.x - WIN_RADIUS_W;
-    tile_offset.y = 2.0 * blockIdx.y * blockDim.y - WIN_RADIUS_H;
-    printf("gipuma_red_lineRefine_cu x, y: %d %d \n", p.x, p.y);
+    if ((p.x  + p.y) % 2 == 1) {
+        return;
+    }
+    const int rows = gs.cameras->rows;
+    const int cols = gs.cameras->cols;
 
-    // gipuma_checkerboard_lineRefinement_cu<T>(gs, p, tile_offset, iter);
+    if (p.x >= cols) return;
+    if (p.y >= rows) return;
+    lineRefinement_cu<T>(gs, p);
 }
 
-float printTotalCost(GlobalState &gs) {
+float getAverageCost(GlobalState &gs) {
     float c = 0.f;
-    printf("gs.cameras->rows: %d\n", gs.cameras->rows);
-    printf("gs.cameras->cols: %d\n", gs.cameras->cols);
     for (int i = 0; i < gs.cameras->rows; i++) {
         for (int j = 0; j < gs.cameras->cols; j++) {
-            c += gs.lines->lineCost[i * gs.cameras->cols + j];
+            c += gs.lines->lineCost[i * gs.cameras->cols + j] / 1000.f;
         }
     }
 
-    printf("c: %f\n\n\n\n", c);
-    return c;
+    // printf("total cost 1000 * %f \n", c);
+    float c2 = c / (gs.cameras->rows * gs.cameras->cols);
+    return 1000.f * c2;
 }
 
 template <typename T>
@@ -541,37 +852,6 @@ void gipuma(GlobalState &gs) {
     cudaEventCreate(&stop);
 
     checkCudaErrors(cudaMalloc(&gs.cs, rows * cols * sizeof(curandState)));
-
-    // int SHARED_SIZE_W_host;
-#ifndef SHARED_HARDCODED
-    int blocksize_w =
-        gs.params->box_hsize + 1;  // +1 for the gradient computation
-    int blocksize_h =
-        gs.params->box_vsize + 1;  // +1 for the gradient computation
-    WIN_RADIUS_W = (blocksize_w) / (2);
-    WIN_RADIUS_H = (blocksize_h) / (2);
-
-    int BLOCK_W = 32;
-    int BLOCK_H = (BLOCK_W / 2);
-    TILE_W = BLOCK_W;
-    TILE_H = BLOCK_H * 2;
-    SHARED_SIZE_W_m = (TILE_W + WIN_RADIUS_W * 2);
-    SHARED_SIZE_H = (TILE_H + WIN_RADIUS_H * 2);
-    SHARED_SIZE = (SHARED_SIZE_W_m * SHARED_SIZE_H);
-    cudaMemcpyToSymbol(SHARED_SIZE_W, &SHARED_SIZE_W_m,
-                       sizeof(SHARED_SIZE_W_m));
-    // SHARED_SIZE_W_host = SHARED_SIZE_W_m;
-#else
-    // SHARED_SIZE_W_host = SHARED_SIZE;
-#endif
-    int shared_size_host = SHARED_SIZE;
-
-    dim3 grid_size;
-    grid_size.x = (cols + BLOCK_W - 1) / BLOCK_W;
-    grid_size.y = ((rows / 2) + BLOCK_H - 1) / BLOCK_H;
-    dim3 block_size;
-    block_size.x = BLOCK_W;
-    block_size.y = BLOCK_H;
 
     dim3 grid_size_initrand;
     grid_size_initrand.x = (cols + 16 - 1) / 16;
@@ -593,45 +873,52 @@ void gipuma(GlobalState &gs) {
 
     cudaDeviceSynchronize();
 
-    printTotalCost(gs);
+    printf("initial cost: %.8f \n", getAverageCost(gs));
     cudaEventRecord(start);
     // for (int it =0;it<gs.params.iterations; it++) {
     printf("Iteration ");
-    for (int it = 0; it < 0; it++) {
+    for (int it = 0; it < 100; it++) {
         // for (int it = 0; it < maxiter; it++) {
         printf("%d ", it + 1);
         // spatial propagation of 4 closest neighbors (1px up/down/left/right)
         gipuma_black_spatialPropClose_cu<T>
-            <<<grid_size, block_size, shared_size_host * sizeof(T)>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs);
         cudaDeviceSynchronize();
+        printf("cost black close: %.8f \n", getAverageCost(gs));
+
 
         // spatial propagation of 4 far away neighbors (5px up/down/left/right)
         gipuma_black_spatialPropFar_cu<T>
-            <<<grid_size, block_size, shared_size_host * sizeof(T)>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs);
         cudaDeviceSynchronize();
-
-        // plane refinement
+        printf("cost black far: %.8f \n", getAverageCost(gs));
+        // line refinement
         gipuma_black_lineRefine_cu<T>
-            <<<grid_size, block_size, shared_size_host * sizeof(T)>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs);
         cudaDeviceSynchronize();
+        printf("cost black refine: %.8f \n", getAverageCost(gs));
 
         // spatial propagation of 4 closest neighbors (1px up/down/left/right)
         gipuma_red_spatialPropClose_cu<T>
-            <<<grid_size, block_size, shared_size_host * sizeof(T)>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs);
         cudaDeviceSynchronize();
+        printf("cost red close: %.8f \n", getAverageCost(gs));
 
-        // spatial propagation of 4 far away neighbors (5px up/down/left/right)
+
+        // // spatial propagation of 4 far away neighbors (5px up/down/left/right)
         gipuma_red_spatialPropFar_cu<T>
-            <<<grid_size, block_size, shared_size_host * sizeof(T)>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs);
         cudaDeviceSynchronize();
+        printf("cost red far: %.8f \n", getAverageCost(gs));
 
-        // plane refinement
+        // line refinement
         gipuma_red_lineRefine_cu<T>
-            <<<grid_size, block_size, shared_size_host * sizeof(T)>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs);
         cudaDeviceSynchronize();
+        printf("cost red refine: %.8f \n", getAverageCost(gs));
     }
     printf("\n");
-    printf("here?\n");
+
     // printf("Computing final disparity\n");
     // gipuma_compute_disp<<<grid_size_initrand, block_size_initrand>>>(gs);
     cudaDeviceSynchronize();
