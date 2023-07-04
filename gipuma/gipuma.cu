@@ -344,6 +344,7 @@ __device__ FORCEINLINE_GIPUMA static int validViewsCount_cu(
 
     return validViewsCount;
 }
+
 template <typename T>
 __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
     const GlobalState &gs, const float2 samples[400], const int cameraIdx, const int samplesRowIdx) {
@@ -535,7 +536,6 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
         printf("geometric cost is less than 0! %f", totalGeometricCost);
     }
 
-// TODO: compute
     float intensityCosts[20];
 
     for (int i = 0; i < selectedViewsNumber; i++) {
@@ -597,7 +597,7 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
 
 template <typename T>
 __device__ FORCEINLINE_GIPUMA void lineRefinement_cu(GlobalState &gs,
-                                                         int2 referencePixel) {
+                                                         int2 referencePixel, const int it) {
     const int cols = gs.cameras->cols;
 
     float mind = gs.params->depthMin;
@@ -631,7 +631,7 @@ __device__ FORCEINLINE_GIPUMA void lineRefinement_cu(GlobalState &gs,
 template <typename T>
 __device__ FORCEINLINE_GIPUMA void spatialPropagation_cu(GlobalState &gs,
                                                          int2 referencePixel,
-                                                         int2 otherPixel) {
+                                                         int2 otherPixel, const int it) {
     const int rows = gs.cameras->rows;
     const int cols = gs.cameras->cols;
 
@@ -648,6 +648,21 @@ __device__ FORCEINLINE_GIPUMA void spatialPropagation_cu(GlobalState &gs,
     float newCost = pmCostMultiview_cu<T>(gs, referencePixel, newDepth, newDir);
 
     if (newCost < gs.lines->lineCost[center]) {
+        if(center == 196 + 1225 * cols) {
+            printf("\n===========UPDATE=============\n center %d,\n prev cost %f,\n prev line %f %f %f,\n prev depth %f,\n next cost %f,\n next line %f %f %f,\n next depth %f \n",
+            center,
+            gs.lines->lineCost[center],
+            gs.lines->unitDirection[center].x,
+            gs.lines->unitDirection[center].y,
+            gs.lines->unitDirection[center].z,
+            gs.lines->depth[center],
+            newCost,
+            newDir.x,
+            newDir.y,
+            newDir.z,
+            newDepth
+            );
+        }
         gs.lines->depth[center] = newDepth;
         gs.lines->unitDirection[center].x = newDir.x;
         gs.lines->unitDirection[center].y = newDir.y;
@@ -657,7 +672,7 @@ __device__ FORCEINLINE_GIPUMA void spatialPropagation_cu(GlobalState &gs,
     return;
 }
 template <typename T>
-__global__ void gipuma_black_spatialPropClose_cu(GlobalState &gs) {
+__global__ void gipuma_black_spatialPropClose_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
     if ((p.x  + p.y) % 2 == 0) {
@@ -686,14 +701,14 @@ __global__ void gipuma_black_spatialPropClose_cu(GlobalState &gs) {
     right.x = p.x + 1;
     right.y = p.y;
 
-    spatialPropagation_cu<T>(gs, p, left);
-    spatialPropagation_cu<T>(gs, p, up);
-    spatialPropagation_cu<T>(gs, p, down);
-    spatialPropagation_cu<T>(gs, p, right);
+    spatialPropagation_cu<T>(gs, p, left, it);
+    spatialPropagation_cu<T>(gs, p, up, it);
+    spatialPropagation_cu<T>(gs, p, down, it);
+    spatialPropagation_cu<T>(gs, p, right, it);
 }
 
 template <typename T>
-__global__ void gipuma_black_spatialPropFar_cu(GlobalState &gs) {
+__global__ void gipuma_black_spatialPropFar_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
     if ((p.x  + p.y) % 2 == 0) {
@@ -712,24 +727,24 @@ __global__ void gipuma_black_spatialPropFar_cu(GlobalState &gs) {
     // Up
     int2 up;
     up.x = p.x;
-    up.y = p.y - 5 * cols;
+    up.y = p.y - 5;
     // Down
     int2 down;
     down.x = p.x;
-    down.y = p.y + 5 * cols;
+    down.y = p.y + 5;
     // Right
     int2 right;
     right.x = p.x + 5;
     right.y = p.y;
 
-    spatialPropagation_cu<T>(gs, p, left);
-    spatialPropagation_cu<T>(gs, p, up);
-    spatialPropagation_cu<T>(gs, p, down);
-    spatialPropagation_cu<T>(gs, p, right);
+    spatialPropagation_cu<T>(gs, p, left, it);
+    spatialPropagation_cu<T>(gs, p, up, it);
+    spatialPropagation_cu<T>(gs, p, down, it);
+    spatialPropagation_cu<T>(gs, p, right, it);
 }
 
 template <typename T>
-__global__ void gipuma_black_lineRefine_cu(GlobalState &gs) {
+__global__ void gipuma_black_lineRefine_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
     if ((p.x  + p.y) % 2 == 0) {
@@ -740,11 +755,11 @@ __global__ void gipuma_black_lineRefine_cu(GlobalState &gs) {
 
     if (p.x >= cols) return;
     if (p.y >= rows) return;
-    lineRefinement_cu<T>(gs, p);
+    lineRefinement_cu<T>(gs, p, it);
 }
 
 template <typename T>
-__global__ void gipuma_red_spatialPropClose_cu(GlobalState &gs) {
+__global__ void gipuma_red_spatialPropClose_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
     if ((p.x  + p.y) % 2 == 1) {
@@ -771,14 +786,14 @@ __global__ void gipuma_red_spatialPropClose_cu(GlobalState &gs) {
     right.x = p.x + 1;
     right.y = p.y;
 
-    spatialPropagation_cu<T>(gs, p, left);
-    spatialPropagation_cu<T>(gs, p, up);
-    spatialPropagation_cu<T>(gs, p, down);
-    spatialPropagation_cu<T>(gs, p, right);
+    spatialPropagation_cu<T>(gs, p, left, it);
+    spatialPropagation_cu<T>(gs, p, up, it);
+    spatialPropagation_cu<T>(gs, p, down, it);
+    spatialPropagation_cu<T>(gs, p, right, it);
 }
 
 template <typename T>
-__global__ void gipuma_red_spatialPropFar_cu(GlobalState &gs) {
+__global__ void gipuma_red_spatialPropFar_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
     if ((p.x  + p.y) % 2 == 1) {
@@ -797,24 +812,24 @@ __global__ void gipuma_red_spatialPropFar_cu(GlobalState &gs) {
     // Up
     int2 up;
     up.x = p.x;
-    up.y = p.y - 5 * cols;
+    up.y = p.y - 5;
     // Down
     int2 down;
     down.x = p.x;
-    down.y = p.y + 5 * cols;
+    down.y = p.y + 5;
     // Right
     int2 right;
     right.x = p.x + 5;
     right.y = p.y;
 
-    spatialPropagation_cu<T>(gs, p, left);
-    spatialPropagation_cu<T>(gs, p, up);
-    spatialPropagation_cu<T>(gs, p, down);
-    spatialPropagation_cu<T>(gs, p, right);
+    spatialPropagation_cu<T>(gs, p, left, it);
+    spatialPropagation_cu<T>(gs, p, up, it);
+    spatialPropagation_cu<T>(gs, p, down, it);
+    spatialPropagation_cu<T>(gs, p, right, it);
 }
 
 template <typename T>
-__global__ void gipuma_red_lineRefine_cu(GlobalState &gs) {
+__global__ void gipuma_red_lineRefine_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
     if ((p.x  + p.y) % 2 == 1) {
@@ -825,7 +840,33 @@ __global__ void gipuma_red_lineRefine_cu(GlobalState &gs) {
 
     if (p.x >= cols) return;
     if (p.y >= rows) return;
-    lineRefinement_cu<T>(gs, p);
+    lineRefinement_cu<T>(gs, p, it);
+}
+
+__global__ void gipuma_compute_disp(GlobalState &gs) {
+    const int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
+                             blockIdx.y * blockDim.y + threadIdx.y);
+
+    const int cols = gs.cameras->cols;
+    const int rows = gs.cameras->rows;
+    if (p.x >= cols) return;
+    if (p.y >= rows) return;
+
+    const int center = p.y * cols + p.x;
+    float3 lineDirection = gs.lines->unitDirection[center];
+    float3 direction_transformed;
+    // Transform back direction to world coordinate
+    matvecmul4(gs.cameras->cameras[REFERENCE].R_orig_inv, lineDirection,
+               (&direction_transformed));
+
+    // TODO: transform depth?
+    // if (gs.lines->c[center] != MAXCOST)
+    //     norm_transformed.w =
+    //         getDisparity_cu(norm, norm.w, p, gs.cameras->cameras[REFERENCE]);
+    // else
+    //     norm_transformed.w = 0;
+    gs.lines->unitDirection[center] = direction_transformed;
+    return;
 }
 
 float getAverageCost(GlobalState &gs) {
@@ -877,50 +918,49 @@ void gipuma(GlobalState &gs) {
     cudaEventRecord(start);
     // for (int it =0;it<gs.params.iterations; it++) {
     printf("Iteration ");
-    for (int it = 0; it < 100; it++) {
+    for (int it = 0; it < 16; it++) {
         // for (int it = 0; it < maxiter; it++) {
         printf("%d ", it + 1);
         // spatial propagation of 4 closest neighbors (1px up/down/left/right)
         gipuma_black_spatialPropClose_cu<T>
-            <<<grid_size_initrand, block_size_initrand>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost black close: %.8f \n", getAverageCost(gs));
 
 
         // spatial propagation of 4 far away neighbors (5px up/down/left/right)
         gipuma_black_spatialPropFar_cu<T>
-            <<<grid_size_initrand, block_size_initrand>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost black far: %.8f \n", getAverageCost(gs));
         // line refinement
         gipuma_black_lineRefine_cu<T>
-            <<<grid_size_initrand, block_size_initrand>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost black refine: %.8f \n", getAverageCost(gs));
 
         // spatial propagation of 4 closest neighbors (1px up/down/left/right)
         gipuma_red_spatialPropClose_cu<T>
-            <<<grid_size_initrand, block_size_initrand>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost red close: %.8f \n", getAverageCost(gs));
 
 
         // // spatial propagation of 4 far away neighbors (5px up/down/left/right)
         gipuma_red_spatialPropFar_cu<T>
-            <<<grid_size_initrand, block_size_initrand>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost red far: %.8f \n", getAverageCost(gs));
-
         // line refinement
         gipuma_red_lineRefine_cu<T>
-            <<<grid_size_initrand, block_size_initrand>>>(gs);
+            <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost red refine: %.8f \n", getAverageCost(gs));
     }
     printf("\n");
 
-    // printf("Computing final disparity\n");
-    // gipuma_compute_disp<<<grid_size_initrand, block_size_initrand>>>(gs);
+    // Transform directions to world space
+    gipuma_compute_disp<<<grid_size_initrand, block_size_initrand>>>(gs);
     cudaDeviceSynchronize();
     cudaEventRecord(stop);
 

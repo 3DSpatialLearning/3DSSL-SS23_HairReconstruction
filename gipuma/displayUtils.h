@@ -79,19 +79,22 @@ static string getColorString(Vec3i color) {
 
 template <typename ImgType>
 static void storeLineMapPlyFileBinary(char *plyFilePath,
+                                    char *plyFileLineMapDirections,
                                       const Mat_<float> &depthImg,
                                       const Mat_<Vec3f> &directionsImg,
                                       const Mat_<ImgType> img, Camera cam) {
     cout << "Saving line map in " << plyFilePath << endl;
-
+    int samplesAlongDirection = 4;
     FILE *outputPly;
     outputPly = fopen(plyFilePath, "wb");
 
+    int cols = depthImg.cols;
+    int rows = depthImg.rows;
     // write header
     fprintf(outputPly, "ply\n");
     fprintf(outputPly, "format binary_little_endian 1.0\n");
     fprintf(outputPly, "element vertex %d\n",
-            depthImg.rows * depthImg.cols * 2);
+            rows * cols);
     fprintf(outputPly, "property float x\n");
     fprintf(outputPly, "property float y\n");
     fprintf(outputPly, "property float z\n");
@@ -100,23 +103,21 @@ static void storeLineMapPlyFileBinary(char *plyFilePath,
     fprintf(outputPly, "property uchar blue\n");
     fprintf(outputPly, "end_header\n");
 
-    const float redC = 255.f;
-    const float greenC = 0.f;
-    const float blueC = 0.f;
+    char redC = 255;
+    char greenC = 0;
+    char blueC = 0;
+
 // write data
 #pragma omp parallel for
-    for (int x = 0; x < depthImg.cols; x++) {
-        for (int y = 0; y < depthImg.rows; y++) {
+    for (int x = 0; x < cols; x++) {
+        for (int y = 0; y < rows; y++) {
             Vec3f direction = directionsImg(y, x);
             ImgType color = img(y, x);
 
             Vec3f ptX = get3Dpoint(cam, x, y, depthImg(y, x));
 
-			Vec3f ptX2 = ptX + direction;
-
-                // cout << "ptX2: " << ptX2.t() << endl;
             if (!(ptX(0) < FLT_MAX && ptX(0) > -FLT_MAX) ||
-                !(ptX(1) < FLT_MAX && ptX(12) > -FLT_MAX) ||
+                !(ptX(1) < FLT_MAX && ptX(1) > -FLT_MAX) ||
                 !(ptX(2) < FLT_MAX && ptX(2) >= -FLT_MAX)) {
                 ptX(0) = 0.0f;
                 ptX(1) = 0.0f;
@@ -128,16 +129,59 @@ static void storeLineMapPlyFileBinary(char *plyFilePath,
                 fwrite(&color, sizeof(color), 1, outputPly);
                 fwrite(&color, sizeof(color), 1, outputPly);
                 fwrite(&color, sizeof(color), 1, outputPly);
-
-                fwrite(&(ptX2(0)), sizeof(float), 3, outputPly);
-                fwrite(&redC, sizeof(float), 1, outputPly);
-                fwrite(&greenC, sizeof(float), 1, outputPly);
-                fwrite(&blueC, sizeof(float), 1, outputPly);
             }
         }
     }
 
     fclose(outputPly);
+
+    FILE *outputDirectionsPly;
+    outputDirectionsPly = fopen(plyFileLineMapDirections, "wb");
+
+    // write header
+    fprintf(outputDirectionsPly, "ply\n");
+    fprintf(outputDirectionsPly, "format binary_little_endian 1.0\n");
+    fprintf(outputDirectionsPly, "element vertex %d\n", rows * cols * samplesAlongDirection);
+    fprintf(outputDirectionsPly, "property float x\n");
+    fprintf(outputDirectionsPly, "property float y\n");
+    fprintf(outputDirectionsPly, "property float z\n");
+    fprintf(outputDirectionsPly, "property uchar red\n");
+    fprintf(outputDirectionsPly, "property uchar green\n");
+    fprintf(outputDirectionsPly, "property uchar blue\n");
+    fprintf(outputDirectionsPly, "end_header\n");
+
+
+#pragma omp parallel for
+    for (int x = 0; x < cols; x++) {
+        for (int y = 0; y < rows; y++) {
+            Vec3f direction = directionsImg(y, x);
+            ImgType color = img(y, x);
+
+            Vec3f ptX = get3Dpoint(cam, x, y, depthImg(y, x));
+
+
+            if (!(ptX(0) < FLT_MAX && ptX(0) > -FLT_MAX) ||
+                !(ptX(1) < FLT_MAX && ptX(1) > -FLT_MAX) ||
+                !(ptX(2) < FLT_MAX && ptX(2) >= -FLT_MAX)) {
+                ptX(0) = 0.0f;
+                ptX(1) = 0.0f;
+                ptX(2) = 0.0f;
+            }
+            
+            for(int sampleIdx = 1; sampleIdx <= samplesAlongDirection; sampleIdx++) {
+                Vec3f ptX2 = ptX + std::pow(-1, sampleIdx) * (0.00001f) * sampleIdx  * direction;
+#pragma omp critical
+            {
+                fwrite(&(ptX2(0)), sizeof(float), 3, outputDirectionsPly);
+                fwrite(&redC, sizeof(redC), 1, outputDirectionsPly);
+                fwrite(&greenC, sizeof(greenC), 1, outputDirectionsPly);
+                fwrite(&blueC, sizeof(blueC), 1, outputDirectionsPly);
+            }
+            }
+        }
+    }
+
+    fclose(outputDirectionsPly);
 }
 
 template <typename ImgType>
@@ -197,7 +241,7 @@ static void storePlyFileBinary(char *plyFilePath, const Mat_<float> &depthImg,
             // ptX_v1 << " / " << ptX << endl;
 
             if (!(ptX(0) < FLT_MAX && ptX(0) > -FLT_MAX) ||
-                !(ptX(1) < FLT_MAX && ptX(12) > -FLT_MAX) ||
+                !(ptX(1) < FLT_MAX && ptX(1) > -FLT_MAX) ||
                 !(ptX(2) < FLT_MAX && ptX(2) >= -FLT_MAX)) {
                 ptX(0) = 0.0f;
                 ptX(1) = 0.0f;
@@ -287,7 +331,7 @@ static void storePlyFile(char *plyFilePath, const Mat_<float> &depthImg,
             // ptX_v1 << " / " << ptX << endl;
 
             if (!(ptX(0) < FLT_MAX && ptX(0) > -FLT_MAX) ||
-                !(ptX(1) < FLT_MAX && ptX(12) > -FLT_MAX) ||
+                !(ptX(1) < FLT_MAX && ptX(1) > -FLT_MAX) ||
                 !(ptX(2) < FLT_MAX && ptX(2) >= -FLT_MAX)) {
                 ptX(0) = 0.0f;
                 ptX(1) = 0.0f;

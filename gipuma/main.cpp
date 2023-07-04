@@ -1012,12 +1012,24 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
         Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC3);
     Mat_<float> cudadisp =
         Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1);
+    Mat_<float> lineCost =
+        Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1);
+    Mat_<float> lineDepth =
+        Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1);
+    Mat_<Vec3f> lineDirection =
+        Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC3);
+    float c = 0.f;
     for (int i = 0; i < img_grayscale[0].cols; i++)
         for (int j = 0; j < img_grayscale[0].rows; j++) {
             int center = i + img_grayscale[0].cols * j;
             float4 n = gs->lines->norm4[center];
             norm0(j, i) = Vec3f(n.x, n.y, n.z);
             cudadisp(j, i) = gs->lines->norm4[i + img_grayscale[0].cols * j].w;
+            lineCost(j, i) = gs->lines->lineCost[i + img_grayscale[0].cols * j];
+            lineDepth(j, i) = gs->lines->depth[center];
+            float3 direction = gs->lines->unitDirection[center];
+            lineDirection(j, i) = Vec3f(direction.x, direction.y, direction.z);
+            c += lineCost(j, i);
         }
 
     Mat_<Vec3f> norm0disp = norm0.clone();
@@ -1063,6 +1075,16 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
 
         storePlyFileBinary(plyFile, disp0, norm0, img_grayscale[i],
                            camParamsNotTransformed.cameras[i], distImg);
+
+        char plyFileLineMap[256];
+        sprintf(plyFileLineMap, "%s/3d_model_line_map%zu.ply", outputFolder, i);
+
+        char plyFileLineMapDirections[256];
+        sprintf(plyFileLineMapDirections, "%s/3d_model_line_map_direction%zu.ply", outputFolder, i);
+    
+        storeLineMapPlyFileBinary(plyFileLineMap, plyFileLineMapDirections, lineDepth, lineDirection, img_grayscale[i],
+                           camParamsNotTransformed.cameras[i]);
+
         Mat dist_display, dist_display_col;
         getDisparityForDisplay(distImg, dist_display, dist_display_col,
                                algParams.max_disparity);
