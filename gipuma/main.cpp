@@ -1064,6 +1064,24 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     sprintf(outputPath, "%s/normals.dmb", outputFolder);
     writeDmbNormal(outputPath, norm0);
 
+    // store depth
+    sprintf(outputPath, "%s/depth.dmb", outputFolder);
+    writeDmb(outputPath, lineDepth);
+
+    // store directions
+    sprintf(outputPath, "%s/directions.dmb", outputFolder);
+    writeDmbNormal(outputPath, lineDirection);
+
+    // directions image
+    Mat_<Vec3f> dir0disp = lineDirection.clone();
+    Mat dir_display;
+    getNormalsForDisplay(dir0disp, dir_display);
+    testImg_display.copyTo(
+        dir_display(Rect(cols - testImg_display.cols, 0,
+                            testImg_display.cols, testImg_display.rows)));
+    writeImageToFile(outputFolder, "directions", dir_display);
+    dir_display.release();
+
     Mat_<float> distImg;
 
     for (size_t i = 0; i < (size_t)algParams.num_img_processed; i++) {

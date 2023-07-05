@@ -648,21 +648,6 @@ __device__ FORCEINLINE_GIPUMA void spatialPropagation_cu(GlobalState &gs,
     float newCost = pmCostMultiview_cu<T>(gs, referencePixel, newDepth, newDir);
 
     if (newCost < gs.lines->lineCost[center]) {
-        if(center == 196 + 1225 * cols) {
-            printf("\n===========UPDATE=============\n center %d,\n prev cost %f,\n prev line %f %f %f,\n prev depth %f,\n next cost %f,\n next line %f %f %f,\n next depth %f \n",
-            center,
-            gs.lines->lineCost[center],
-            gs.lines->unitDirection[center].x,
-            gs.lines->unitDirection[center].y,
-            gs.lines->unitDirection[center].z,
-            gs.lines->depth[center],
-            newCost,
-            newDir.x,
-            newDir.y,
-            newDir.z,
-            newDepth
-            );
-        }
         gs.lines->depth[center] = newDepth;
         gs.lines->unitDirection[center].x = newDir.x;
         gs.lines->unitDirection[center].y = newDir.y;
@@ -916,9 +901,8 @@ void gipuma(GlobalState &gs) {
 
     printf("initial cost: %.8f \n", getAverageCost(gs));
     cudaEventRecord(start);
-    // for (int it =0;it<gs.params.iterations; it++) {
-    printf("Iteration ");
-    for (int it = 0; it < 16; it++) {
+    printf("Iterations count %d", gs.params->iterations);
+    for (int it =0;it<gs.params->iterations; it++) {
         // for (int it = 0; it < maxiter; it++) {
         printf("%d ", it + 1);
         // spatial propagation of 4 closest neighbors (1px up/down/left/right)
