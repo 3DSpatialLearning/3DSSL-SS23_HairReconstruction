@@ -32,11 +32,21 @@ static __device__ float4 operator+(float4 a, float4 b) {
                        a.z+b.z,
                        0);
 }
+static __device__ float3 operator+(float3 a, float3 b) {
+    return make_float3(a.x+b.x,
+                       a.y+b.y,
+                       a.z+b.z);
+}
 static __device__ float4 operator/(float4 a, float k) {
     return make_float4(a.x/k,
                        a.y/k,
                        a.z/k,
                        0);
+}
+static __device__ float3 operator/(float3 a, float k) {
+    return make_float3(a.x/k,
+                       a.y/k,
+                       a.z/k);
 }
 static __device__ float l1_float4 (float4 a) {
     return ( fabsf (a.x) +

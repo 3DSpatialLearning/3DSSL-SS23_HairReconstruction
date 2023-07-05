@@ -7,7 +7,7 @@
 
 class __align__(128) Point_cu : public Managed {
 public:
-    float4 normal; // Normal
+    float4 direction; // Direction
     float4 coord; // Point coordinate
     float texture; // Average texture color
 };

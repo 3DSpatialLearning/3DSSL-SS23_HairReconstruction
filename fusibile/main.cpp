@@ -57,13 +57,13 @@
 
 struct InputData{
     string path;
-    //int id;
     string id;
     int camId;
     Camera cam;
-    Mat_<float> depthMap;
     Mat_<Vec3b> inputImage;
-    Mat_<Vec3f> normals;
+
+    Mat_<float> depth;
+    Mat_<Vec3f> directions;
 };
 
 int getCameraFromId(string id, vector<Camera> &cameras){
@@ -758,13 +758,14 @@ static int runFusibile (int argc,
         dat.path = results_folder + subfolders[i];
         dat.inputImage = imread((inputFiles.images_folder + id + ext), IMREAD_COLOR);
 
-        //read normal
-        cout << "Reading normal " << i << endl;
-        readDmbNormal((dat.path + "/normals.dmb").c_str(),dat.normals);
+        // read direction
+        cout << "Reading directions " << i << endl;
+        // readDmbNormal((dat.path + "/normals.dmb").c_str(),dat.normals);
+        readDmbNormal((dat.path + "/directions.dmb").c_str(),dat.directions);
 
-        //read depth
-        cout << "Reading disp " << i << endl;
-        readDmb((dat.path + "/disp.dmb").c_str(),dat.depthMap);
+        // read depth
+        cout << "Reading depth " << i << endl;
+        readDmb((dat.path + "/depth.dmb").c_str(),dat.depth);
 
         //inputData.push_back(move(dat));
         inputData.push_back(dat);
@@ -807,26 +808,22 @@ static int runFusibile (int argc,
     vector<Mat > img_color_float_alpha         (img_grayscale.size());
     vector<Mat > normals_and_depth             (img_grayscale.size());
     vector<Mat_<uint16_t> > img_grayscale_uint (img_grayscale.size());
+    vector<Mat > directions_and_depth(img_grayscale.size());
+    vector<Mat > depth_float(img_grayscale.size());
+    cout << "img_grayscale size" << img_grayscale.size() << endl;
     for (size_t i = 0; i<img_grayscale.size(); i++)
     {
         //img_grayscale[i].convertTo(img_grayscale_float[i], CV_32FC1, 1.0/255.0); // or CV_32F works (too)
         img_grayscale[i].convertTo(img_grayscale_float[i], CV_32FC1); // or CV_32F works (too)
         img_grayscale[i].convertTo(img_grayscale_uint[i], CV_16UC1); // or CV_32F works (too)
-        if(algParameters.color_processing) {
-            vector<Mat_<float> > rgbChannels ( 3 );
-            img_color_float_alpha[i] = Mat::zeros ( img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC4 );
-            img_color[i].convertTo (img_color_float[i], CV_32FC3); // or CV_32F works (too)
-            Mat alpha( img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1 );
-            split (img_color_float[i], rgbChannels);
-            rgbChannels.push_back( alpha);
-            merge (rgbChannels, img_color_float_alpha[i]);
-        }
-        /* Create vector of normals and disparities */
-        vector<Mat_<float> > normal ( 3 );
-        normals_and_depth[i] = Mat::zeros ( img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC4 );
-        split (inputData[i].normals, normal);
-        normal.push_back( inputData[i].depthMap);
-        merge (normal, normals_and_depth[i]);
+        /* Create vector of directions and depth */
+        vector<Mat_<float> > direction ( 3 );
+        directions_and_depth[i] = Mat::zeros ( img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC4 );
+        split (inputData[i].directions, direction);
+        direction.push_back( inputData[i].depth);
+        merge (direction, directions_and_depth[i]);
+
+        inputData[i].depth.convertTo(depth_float[i], CV_32FC1); // or CV_32F works (too)
 
     }
     //int64_t t = getTickCount ();
@@ -839,7 +836,8 @@ static int runFusibile (int argc,
             addImageToTextureFloatGray (img_grayscale_float, gs->imgs);
     }
 
-    addImageToTextureFloatColor (normals_and_depth, gs->normals_depths);
+    addImageToTextureFloatGray(depth_float, gs->depths);
+    addImageToTextureFloatColor(directions_and_depth, gs->directions);
 
 #define pow2(x) ((x)*(x))
 #define get_pow2_norm(x,y) (pow2(x)+pow2(y))
@@ -851,7 +849,10 @@ static int runFusibile (int argc,
     sprintf ( plyFile, "%s/final3d_model.ply", output_folder);
     printf("Writing ply file %s\n", plyFile);
     //storePlyFileAsciiPointCloud ( plyFile, pc_list, inputData[0].cam, distImg);
-    storePlyFileBinaryPointCloud ( plyFile, pc_list, distImg);
+    // storePlyFileBinaryPointCloud ( plyFile, pc_list, distImg);
+    char plyFileDir[256];
+    sprintf ( plyFileDir, "%s/final3d_modelDir.ply", output_folder);
+    storePlyFileBinaryPointCloudWithDirections(plyFile, plyFileDir, pc_list);
     //char xyzFile[256];
     //sprintf ( xyzFile, "%s/final3d_model.xyz", output_folder);
     //printf("Writing ply file %s\n", xyzFile);
