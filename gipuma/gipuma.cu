@@ -254,7 +254,7 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
             gs.cameras->cameras[REFERENCE].K_inv,
             gs.cameras->cameras[REFERENCE].Rt, &sampleWorldCoord);
 
-        for (int i = 1; i < selectedViewsNumber + 1; i++) {
+        for (int i = 0; i < selectedViewsNumber; i++) {
             int cameraIdx = selectedViewsSubset[i];
 
             // correct
@@ -262,7 +262,7 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
             getPointPixelCoord_cu(sampleWorldCoord,
                                   gs.cameras->cameras[cameraIdx].P,
                                   &samplePixelInImageI);
-            samples[i * k + j] = samplePixelInImageI;
+            samples[cameraIdx * k + j] = samplePixelInImageI;
         }
     }
 }
@@ -285,26 +285,28 @@ __device__ FORCEINLINE_GIPUMA static float angularDiff_cu(
 }
 
 template <typename T>
-__device__ FORCEINLINE_GIPUMA static int validViewsCount_cu(
+__device__ FORCEINLINE_GIPUMA static int validNeighborsCount_cu(
     const GlobalState &gs, const float2 samples[400]) {
     const int k = gs.params->k;
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
+    int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
 
     const int rows = gs.cameras->rows;
     const int cols = gs.cameras->cols;
 
-    int validViewsCount = 0;
+    int validNeighborsCount = 0;
     for (int i = 0; i < selectedViewsNumber; i++) {
         int validSamplesCount = 0;
+        const int cameraIdx = selectedViewsSubset[i];
 
         for (int j = 0; j < k; j++) {
             if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
                 samples[j].y >= rows) {
                 continue;
             }
-
-            if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
-                samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
+            const float2 sampleInOtherView = samples[cameraIdx * k + j];
+            if (sampleInOtherView.x < 0 || sampleInOtherView.y < 0 ||
+                sampleInOtherView.x >= cols || sampleInOtherView.y >= rows) {
                 continue;
             }
             validSamplesCount++;
@@ -314,15 +316,15 @@ __device__ FORCEINLINE_GIPUMA static int validViewsCount_cu(
             // printf("WARNING valid sample count is 0!\n");
             continue;
         }
-        validViewsCount++;
+        validNeighborsCount++;
     }
 
-    return validViewsCount;
+    return validNeighborsCount;
 }
 
 template <typename T>
 __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
-    const GlobalState &gs, const float2 samples[400], const int cameraIdx, const int samplesRowIdx) {
+    const GlobalState &gs, const float2 samples[400], const int cameraIdx) {
     const int k = gs.params->k;
 
     const int rows = gs.cameras->rows;
@@ -335,8 +337,8 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
     float confidenceValuesSum = 0.f;
 
     float2 lineDirection;
-    lineDirection.x = samples[samplesRowIdx * k + k - 1].x - samples[samplesRowIdx * k].x;
-    lineDirection.y = samples[samplesRowIdx * k + k - 1].y - samples[samplesRowIdx * k].y;
+    lineDirection.x = samples[cameraIdx * k + k - 1].x - samples[cameraIdx * k].x;
+    lineDirection.y = samples[cameraIdx * k + k - 1].y - samples[cameraIdx * k].y;
     int validSamplesCount = 0;
     for (int j = 0; j < k; j++) {
         if (samples[j].x < 0 || samples[j].y < 0 || samples[j].x >= cols ||
@@ -344,14 +346,15 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
             continue;
         }
 
-        if (samples[samplesRowIdx * k + j].x < 0 || samples[samplesRowIdx * k + j].y < 0 ||
-            samples[samplesRowIdx * k + j].x >= cols || samples[samplesRowIdx * k + j].y >= rows) {
+        const float2 sampleInOtherView = samples[cameraIdx * k + j];
+        if (sampleInOtherView.x < 0 || sampleInOtherView.y < 0 ||
+            sampleInOtherView.x >= cols || sampleInOtherView.y >= rows) {
             continue;
         }
 
         validSamplesCount++;
-        const float orientaion = texat(imgOrient, samples[samplesRowIdx * k + j].x, samples[samplesRowIdx * k + j].y);
-        const float confidence = texat(imgConf, samples[samplesRowIdx * k + j].x, samples[samplesRowIdx * k + j].y);
+        const float orientaion = texat(imgOrient, sampleInOtherView.x, sampleInOtherView.y);
+        const float confidence = texat(imgConf, sampleInOtherView.x, sampleInOtherView.y);
 
         confidenceValuesSum += confidence;
 
@@ -359,7 +362,7 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
     }
 
     if (confidenceValuesSum == 0) {
-        // printf("WARNING confidenceValuesSum is 0!\n");
+        // printf("WARNING confidenceValuesSum is 0! cameraIdx %d\n", cameraIdx);
         return 1000.f;
     }
 
@@ -369,7 +372,7 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
 
 template <typename T>
 __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
-    const GlobalState &gs, const float2 samples[400], const int cameraIdx, const int samplesRowIdx) {
+    const GlobalState &gs, const float2 samples[400], const int cameraIdx) {
     const int k = gs.params->k;
     float intensityCost = 0.f;
 
@@ -377,7 +380,6 @@ __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
     const int cols = gs.cameras->cols;
 
     const cudaTextureObject_t referenceImg = gs.imgs[REFERENCE];
-    const int i = samplesRowIdx;
     const cudaTextureObject_t otherImg = gs.imgs[cameraIdx];
     float referenceImageIntensitySum = 0.f;
     float otherImageIntensitySum = 0.f;
@@ -388,14 +390,14 @@ __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
             samples[j].y >= rows) {
             continue;
         }
-
-        if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
-            samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
+        float2 sampleInOtherImg = samples[cameraIdx * k + j];
+        if (sampleInOtherImg.x < 0 || sampleInOtherImg.y < 0 ||
+            sampleInOtherImg.x >= cols || sampleInOtherImg.y >= rows) {
             continue;
         }
         validSamples += 1;
         referenceImageIntensitySum += (texat(referenceImg, samples[j].x, samples[j].y));
-        otherImageIntensitySum += (texat(otherImg, samples[i * k + j].x, samples[i * k + j].y));
+        otherImageIntensitySum += (texat(otherImg, sampleInOtherImg.x, sampleInOtherImg.y));
     }
 
     if (validSamples == 0) {
@@ -419,12 +421,13 @@ __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
             continue;
         }
 
-        if (samples[i * k + j].x < 0 || samples[i * k + j].y < 0 ||
-            samples[i * k + j].x >= cols || samples[i * k + j].y >= rows) {
+        float2 sampleInOtherImg = samples[cameraIdx * k + j];
+        if (sampleInOtherImg.x < 0 || sampleInOtherImg.y < 0 ||
+            sampleInOtherImg.x >= cols || sampleInOtherImg.y >= rows) {
             continue;
         }
         float intensityReference = texat(referenceImg, samples[j].x, samples[j].y) - referenceImageIntensityMean;
-        float intensityOther = texat(otherImg, samples[i * k + j].x, samples[i * k + j].y) - otherImageIntensityMean;
+        float intensityOther = texat(otherImg, sampleInOtherImg.x, sampleInOtherImg.y) - otherImageIntensityMean;
 
         numerator += (intensityReference * intensityOther);
         denominator1 += (intensityOther * intensityOther);
@@ -456,6 +459,74 @@ static __device__ FORCEINLINE_GIPUMA void sort_small(float *__restrict__ d,
     }
 }
 
+
+template <typename T>
+__device__ FORCEINLINE_GIPUMA static float getCombinedCosts_cu(
+    const float geometricCostRefImage,
+    float geometricCosts[20],
+    const float intensityCostRefImage,
+    float intensityCosts[20],
+    int selectedViewsNumber,
+    int cost_comb,
+    int n_best,
+    const int validNeighborsCount
+) {
+
+    if (validNeighborsCount == 0) {
+        printf("getCombinedCosts_cu WARNING valid view count is 0!\n");
+        printf("getCombinedCosts_cu WARNING valid view count is 0!\n");
+        printf("getCombinedCosts_cu WARNING valid view count is 0!\n");
+        return MAXCOST;
+    }
+    // printf("geometricCostRefImage %f \n", geometricCostRefImage);
+    sort_small(geometricCosts, selectedViewsNumber);
+
+    int numBest = validNeighborsCount; 
+    // int numBest = validViewsCount; 
+    if (cost_comb == COMB_BEST_N)
+        numBest = min(numBest, n_best);
+
+    float totalGeometricCost = 0.f;
+    totalGeometricCost += numBest * geometricCostRefImage;
+    for (int i = 0; i < numBest; i++) {
+        totalGeometricCost += geometricCosts[i];
+    }
+    totalGeometricCost = totalGeometricCost / (2*(float)numBest + 1);
+    // totalGeometricCost = totalGeometricCost / (2*(float)numBest);
+
+    if(totalGeometricCost < -0.01f) {
+        printf("geometric cost is less than 0! %f", totalGeometricCost);
+    }
+
+
+    sort_small(intensityCosts, selectedViewsNumber);
+
+    float totalIntensityCost = 0.f;
+    totalIntensityCost += intensityCostRefImage;
+    for (int i = 0; i < numBest; i++) {
+        totalIntensityCost += intensityCosts[i];
+    }
+    totalIntensityCost = totalIntensityCost / ((float)numBest + 1);
+    // totalIntensityCost = totalIntensityCost / ((float)numBest);
+
+
+    if(totalIntensityCost < -0.01f) {
+        printf("inten cost is less than 0! %f", totalIntensityCost);
+    }
+    float alpha = 0.1;
+    float cost = (1 - alpha) * totalGeometricCost + alpha * totalIntensityCost;
+
+    if (cost == 0) {
+        printf("COST IS 0, validNeighborsCount %d, totalGeometricCost %f, totalIntensityCost %f numBest %d, geometricCosts[0] 1, 2, 3: %f %f %f %f\n", validNeighborsCount,totalGeometricCost, totalIntensityCost, numBest,
+        geometricCosts[0],
+        geometricCosts[1],
+        geometricCosts[2],
+        geometricCosts[3]
+        );
+    }
+    return cost;
+}
+
 template <typename T>
 __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
     const GlobalState &gs, const int2 pixelCoord, const float depth,
@@ -463,10 +534,10 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
 
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
     int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
-
     // if(pixelCoord.x != 196 || pixelCoord.y  != 1225) {
-    //     return;
+    //     return 0.f;
     // }
+
 
     float2 samples[400];
     samplePoints_cu<T>(gs, pixelCoord, depth, unitDirection, samples);
@@ -476,26 +547,30 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
     // }
 
 
-    const int validViewsCount = validViewsCount_cu<T>(gs, samples);
+    const int validNeighborsCount = validNeighborsCount_cu<T>(gs, samples);
 
 
-    if (validViewsCount == 0) {
-        printf("WARNING valid view count is 0!\n");
-        printf("WARNING valid view count is 0!\n");
-        printf("WARNING valid view count is 0!\n");
+    if (validNeighborsCount == 0) {
+        // printf("WARNING valid view count is 0!\n");
         return MAXCOST;
     }
 
     float geometricCosts[20];
-    const float geometricCostRefImage = geometricCost_cu<T>(gs, samples, 0, 0);
+    const float geometricCostRefImage = geometricCost_cu<T>(gs, samples, 0);
     for (int i = 0; i < selectedViewsNumber; i++) {
         int cameraIdx = selectedViewsSubset[i];
-        geometricCosts[i] = geometricCost_cu<T>(gs, samples, cameraIdx, i);
+        geometricCosts[i] = geometricCost_cu<T>(gs, samples, cameraIdx);
+        // printf("in for i: %d, cameraIdx: %d, cost %f\n", i, cameraIdx, geometricCosts[i]);
     }
 
     sort_small(geometricCosts, selectedViewsNumber);
+    //     for (int i = 0; i < selectedViewsNumber; i++) {
+    //     printf("sorted in for i: %d, cost %f validNeighborsCount %d\n", i, geometricCosts[i], validNeighborsCount);
+    // }
+    // return 0.f;
 
-    int numBest = validViewsCount; 
+
+    int numBest = validNeighborsCount; 
     if (gs.params->cost_comb == COMB_BEST_N)
         numBest = min(numBest, gs.params->n_best);
 
@@ -511,10 +586,11 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
     }
 
     float intensityCosts[20];
+    const float intensityCostRefImage = intensityCost_cu<T>(gs, samples, 0);
 
     for (int i = 0; i < selectedViewsNumber; i++) {
         int cameraIdx = selectedViewsSubset[i];
-        intensityCosts[i] = intensityCost_cu<T>(gs, samples, cameraIdx, i);
+        intensityCosts[i] = intensityCost_cu<T>(gs, samples, cameraIdx);
     }
 
     sort_small(intensityCosts, selectedViewsNumber);
@@ -531,7 +607,22 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
     }
     float alpha = 0.1;
     float cost = (1 - alpha) * totalGeometricCost + alpha * totalIntensityCost;
+    float cost2 = getCombinedCosts_cu<T>(
+        geometricCostRefImage,
+        geometricCosts,
+        intensityCostRefImage,
+        intensityCosts,
+        selectedViewsNumber,
+        gs.params->cost_comb,
+        gs.params->n_best,
+        validNeighborsCount
+    );
 
+    // if (cost != cost2) {
+    //     printf("WHAAAAT cost %f, cost2 %f\n", cost, cost2);
+    // } else {
+    //     printf("ok cost %f, cost2 %f\n", cost, cost2);
+    // }
     // printf("geom %f int %f  total %f \n", geometricCost, intensityCost, cost);
     return cost;
 }
