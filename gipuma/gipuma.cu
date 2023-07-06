@@ -93,11 +93,6 @@ __device__ FORCEINLINE_GIPUMA void getPixelWorldCoord_cu(const int2 pixel,
              Rt_inv[11] * pixelCameraHomogenCoord.w;
 }
 
-__device__ void dummyfloat3(float3 *res) {
-    res->x = 1.0;
-    res->y = 1.0;
-    res->z = 1.0;
-}
 __device__ FORCEINLINE_GIPUMA void getPointPixelCoord_cu(float3 point, float *P,
                                                          float2 *res) {
     float4 pointHomogenCoord;
@@ -122,15 +117,7 @@ __device__ FORCEINLINE_GIPUMA void getPointPixelCoord_cu(float3 point, float *P,
     res->y = pointCameraCoord.y / pointCameraCoord.z;
 }
 
-__device__ FORCEINLINE_GIPUMA void normalize_cu(float3 *__restrict__ v) {
-    const float normSquared = pow2(v->x) + pow2(v->y) + pow2(v->z);
-    const float inverse_sqrt = rsqrtf(normSquared);
-    v->x *= inverse_sqrt;
-    v->y *= inverse_sqrt;
-    v->z *= inverse_sqrt;
-}
-
-__device__ FORCEINLINE_GIPUMA void normalize2_cu(float2 *__restrict__ v) {
+__device__ FORCEINLINE_GIPUMA void normalize_cu(float2 *__restrict__ v) {
     const float normSquared = pow2(v->x) + pow2(v->y);
     const float inverse_sqrt = rsqrtf(normSquared);
     v->x *= inverse_sqrt;
@@ -211,13 +198,12 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
     const int rk = gs.params->rk;
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
     int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
-    const int referenceImageIndex = 0;
 
     // correct
     float3 pixelWorldCoord;
     getPixelWorldCoord_cu(
-        pixelCoord, depth, gs.cameras->cameras[referenceImageIndex].K_inv,
-        gs.cameras->cameras[referenceImageIndex].Rt_extended_inv,
+        pixelCoord, depth, gs.cameras->cameras[REFERENCE].K_inv,
+        gs.cameras->cameras[REFERENCE].Rt_extended_inv,
         &pixelWorldCoord);
 
     // printf("pixelWorldCoord %f %f %f \n", pixelWorldCoord.x, pixelWorldCoord.y, pixelWorldCoord.z);
@@ -230,7 +216,7 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
     // correct
     float2 seoncdPointPixelCoord;
     getPointPixelCoord_cu(seoncdPointOnLineWorldCoord,
-                          gs.cameras->cameras[referenceImageIndex].P,
+                          gs.cameras->cameras[REFERENCE].P,
                           &seoncdPointPixelCoord);
     // printf("seoncdPointPixelCoord %f %f \n", seoncdPointPixelCoord.x, seoncdPointPixelCoord.y);
 
@@ -241,11 +227,10 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
     // printf("lineInReferenceImageUnitDirection %f %f \n", lineInReferenceImageUnitDirection.x, lineInReferenceImageUnitDirection.y);
 
     // correct
-    normalize2_cu(&lineInReferenceImageUnitDirection);
+    normalize_cu(&lineInReferenceImageUnitDirection);
     // printf("normalized lineInReferenceImageUnitDirection %f %f \n", lineInReferenceImageUnitDirection.x, lineInReferenceImageUnitDirection.y);
 
     // correct
-    // float2 samplesInReferenceView[50];
     int sampleIdx = 0;
 
     for (int i = -k / 2; i <= k / 2; i++) {
@@ -257,14 +242,6 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
         samples[sampleIdx].y =
             pixelCoord.y + scale * lineInReferenceImageUnitDirection.y;
 
-        // samplesInReferenceView[sampleIdx].x =
-        //     pixelCoord.x + scale * lineInReferenceImageUnitDirection.x;
-        // samplesInReferenceView[sampleIdx].y =
-        //     pixelCoord.y + scale * lineInReferenceImageUnitDirection.y;
-        // printf("cuda samplesInReferenceView %d, %f %f %f \n", i, scale, samplesInReferenceView[sampleIdx].x, samplesInReferenceView[sampleIdx].y);
-
-        // samples[sampleIdx].x = samplesInReferenceView[sampleIdx].x;
-        // samples[sampleIdx].y = samplesInReferenceView[sampleIdx].y;
         sampleIdx += 1;
     }
 
@@ -274,13 +251,11 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
         float3 sampleWorldCoord;
         projectSamplePointIn3D_cu(
             samplePixel, pixelWorldCoord, unitDirection,
-            gs.cameras->cameras[referenceImageIndex].K_inv,
-            gs.cameras->cameras[referenceImageIndex].Rt, &sampleWorldCoord);
+            gs.cameras->cameras[REFERENCE].K_inv,
+            gs.cameras->cameras[REFERENCE].Rt, &sampleWorldCoord);
 
         for (int i = 1; i < selectedViewsNumber + 1; i++) {
             int cameraIdx = selectedViewsSubset[i];
-
-            // printf("cuda i %d, cameraIdx %d \n", i, cameraIdx);
 
             // correct
             float2 samplePixelInImageI;
@@ -314,7 +289,7 @@ __device__ FORCEINLINE_GIPUMA static int validViewsCount_cu(
     const GlobalState &gs, const float2 samples[400]) {
     const int k = gs.params->k;
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
-    // const int referenceImageIndex = 0;
+
     const int rows = gs.cameras->rows;
     const int cols = gs.cameras->cols;
 
@@ -398,11 +373,10 @@ __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
     const int k = gs.params->k;
     float intensityCost = 0.f;
 
-    const int referenceImageIndex = 0;
     const int rows = gs.cameras->rows;
     const int cols = gs.cameras->cols;
 
-    const cudaTextureObject_t referenceImg = gs.imgs[referenceImageIndex];
+    const cudaTextureObject_t referenceImg = gs.imgs[REFERENCE];
     const int i = samplesRowIdx;
     const cudaTextureObject_t otherImg = gs.imgs[cameraIdx];
     float referenceImageIntensitySum = 0.f;
