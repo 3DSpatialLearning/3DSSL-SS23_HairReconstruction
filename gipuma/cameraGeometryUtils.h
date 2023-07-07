@@ -8,6 +8,7 @@
 
 #pragma once
 #include "mathUtils.h"
+#include "fileIoUtils.h"
 #include <limits>
 #include <signal.h>
 
@@ -255,17 +256,10 @@ CameraParameters getCameraParameters(CameraParameters_cu &cpc,
     for (size_t i = 0; i < numCameras; i++) {
         decomposeProjectionMatrix(params.cameras[i].P, K[i], R[i], T[i]);
 
-        // cout << "K: " << K[i] << endl;
-        // cout << "R: " << R[i] << endl;
-        // cout << "T: " << T[i] << endl;
-
         // get 3-dimensional translation vectors and camera center (divide by
         // augmented component)
         C[i] = T[i](Range(0, 3), Range(0, 1)) / T[i](3, 0);
         t[i] = -R[i] * C[i];
-
-        // cout << "C: " << C[i] << endl;
-        // cout << "t: " << t[i] << endl;
     }
 
     // transform projection matrices (R and t part) so that P1 = K [I | 0]
@@ -371,14 +365,15 @@ CameraParameters getCameraParameters(CameraParameters_cu &cpc,
         }
         for (int c = 0; c < 3; c++) {
             Rt(c, 3) = params.cameras[i].t(c);
-            ;
             Rt_extended(c, 3) = Rt(c, 3);
         }
 
         params.cameras[i].Rt = Rt;
         params.cameras[i].Rt_extended = Rt_extended;
         params.cameras[i].Rt_extended_inv = Rt_extended.inv();
-        ;
+        copyOpencvMatToFloatArray(params.cameras[i].Rt, &cpc.cameras[i].Rt);
+        copyOpencvMatToFloatArray(params.cameras[i].Rt_extended, &cpc.cameras[i].Rt_extended);
+        copyOpencvMatToFloatArray(params.cameras[i].Rt_extended_inv, &cpc.cameras[i].Rt_extended_inv);
     }
 
     return params;

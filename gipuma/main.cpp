@@ -165,8 +165,7 @@ static void get_directory_entries(const char* dirname,
  * Output: inputFiles, outputFiles, parameters, gt_parameters, - algorithm
  * parameters
  */
-static int getParametersFromCommandLine(int argc,
-                                        char** argv,
+static int getParametersFromCommandLine(int argc, char** argv,
                                         InputFiles& inputFiles,
                                         OutputFiles& outputFiles,
                                         AlgorithmParameters& algParams,
@@ -219,6 +218,8 @@ static int getParametersFromCommandLine(int argc,
     const char* camera_idx_opt = "--camera_idx=";
     const char* k_opt = "-k=";
     const char* rk_opt = "-rk=";
+    const char* orientation_maps_folder_opt = "-orientation_maps_folder";
+    const char* confidence_values_folder_opt = "-confidence_values_folder";
 
     // read in arguments
     for (int i = 1; i < argc; i++) {
@@ -402,6 +403,12 @@ static int getParametersFromCommandLine(int argc,
             sscanf(argv[i] + strlen(k_opt), "%d", &algParams.k);
         } else if (strncmp(argv[i], rk_opt, strlen(rk_opt)) == 0) {
             sscanf(argv[i] + strlen(rk_opt), "%d", &algParams.rk);
+        } else if (strncmp(argv[i], orientation_maps_folder_opt,
+                           strlen(orientation_maps_folder_opt)) == 0) {
+            inputFiles.orientation_maps_folder = argv[++i];
+        } else if (strncmp(argv[i], confidence_values_folder_opt,
+                           strlen(confidence_values_folder_opt)) == 0) {
+            inputFiles.confidence_values_folder = argv[++i];
         } else {
             printf("Command-line parameter warning: unknown option %s\n",
                    argv[i]);
@@ -754,6 +761,47 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
         }
     }
 
+    vector<Mat> orientationMaps(numImages);
+    vector<Mat> orientationMapsFloat(numImages);
+    for (size_t i = 0; i < numImages; i++) {
+        cout << "reading file: "
+             << inputFiles.orientation_maps_folder + "/" +
+                    inputFiles.img_filenames[i]
+             << endl;
+
+        orientationMaps[i] = importFloatImage(
+            inputFiles.orientation_maps_folder + "/" + inputFiles.img_filenames[i] + ".flo"
+        );
+
+
+        orientationMaps[i].convertTo(orientationMapsFloat[i],  CV_32FC1);
+
+        if (orientationMaps[i].rows == 0) {
+            printf("orientaion map image seems to be invalid\n");
+            return -1;
+        }
+    }
+
+    vector<Mat> confidenceValues(numImages);
+    vector<Mat> confidenceValuesFloat(numImages);
+    for (size_t i = 0; i < numImages; i++) {
+        cout << "reading file: "
+             << inputFiles.confidence_values_folder + "/" +
+                    inputFiles.img_filenames[i]
+             << endl;
+        confidenceValues[i] = importFloatImage(
+            inputFiles.confidence_values_folder + "/" +
+            inputFiles.img_filenames[i] + ".flo"
+        );
+
+        confidenceValues[i].convertTo(confidenceValuesFloat[i],  CV_32FC1);
+
+        if (confidenceValues[i].rows == 0) {
+            printf("Confidence value image seems to be invalid\n");
+            return -1;
+        }
+    }
+
     uint32_t rows = img_grayscale[0].rows;
     uint32_t cols = img_grayscale[0].cols;
     uint32_t numPixels = rows * cols;
@@ -761,82 +809,7 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     Mat_<float> groundTruthDisp;
     Mat_<float> groundTruthDispNocc;
     Mat_<Vec3f> groundTruthNormals;
-    if (!inputFiles.gt_filename.empty()) {
-        gtParameters.gtCheck = true;
-        printf("Opening GT image %s\n", inputFiles.gt_filename.c_str());
-        string ext = inputFiles.gt_filename.substr(
-            inputFiles.gt_filename.find_last_of(".") + 1);
-        if (ext.compare("pfm") == 0) {
-            long nx, ny;
-            readPfm(inputFiles.gt_filename.c_str(), groundTruthDisp, &nx, &ny);
-        } else if (ext.compare("dmb") == 0) {
-            readDmb(inputFiles.gt_filename.c_str(), groundTruthDisp);
-        } else {
-            Mat gtImg = imread(inputFiles.gt_filename, -1);
-            gtImg.convertTo(groundTruthDisp, CV_32F);
-        }
-        cout << "gt: " << groundTruthDisp.rows << " " << groundTruthDisp.cols
-             << " " << groundTruthDisp.channels() << " "
-             << groundTruthDisp.depth() << endl;
-        double minVal, maxVal;
-        minMaxLoc(groundTruthDisp, &minVal, &maxVal);
-        // cout << "depth min max: " << minVal << " " << maxVal << endl;
-    }
-    if (!inputFiles.gt_nocc_filename.empty()) {
-        if (!gtParameters.gtCheck) {
-            printf(
-                "Command-line parameter error: Ground truth image (-gt) must "
-                "be specified for use of nocc GT\n");
-            return -1;
-        }
-        gtParameters.noccCheck = true;
-        printf("Opening nocc GT image %s\n",
-               inputFiles.gt_nocc_filename.c_str());
-        Mat gtImg = imread(inputFiles.gt_nocc_filename, -1);
-        gtImg.convertTo(groundTruthDispNocc, CV_32F);
-    } else if (!inputFiles.occ_filename.empty()) {
-        if (!gtParameters.gtCheck) {
-            printf(
-                "Command-line parameter error: Ground truth image (-gt) must "
-                "be specified for use of occlusion mask\n");
-            return -1;
-        }
-        // Mat occlusionImg; //(imgLeft.rows, imgLeft.cols,
-        // CV_16UC1,Scalar(255));
-        printf("Opening Occlusion image %s\n", inputFiles.occ_filename.c_str());
-        Mat occlusionImg = imread(inputFiles.occ_filename, IMREAD_GRAYSCALE);
-        getNoccGTimg(groundTruthDisp, occlusionImg, groundTruthDispNocc);
-    } else {
-        groundTruthDispNocc = groundTruthDisp;
-    }
-    if (!inputFiles.gt_normal_filename.empty()) {
-        cout << inputFiles.gt_normal_filename << endl;
-        Mat gtNormImg = imread(inputFiles.gt_normal_filename, -1);
-        cvtColor(gtNormImg, gtNormImg, COLOR_BGR2RGB);
-        // gtNormImg.convertTo ( groundTruthNormals, CV_32FC3 );
-        groundTruthNormals =
-            Mat::zeros(gtNormImg.rows, gtNormImg.cols, CV_32FC3);
-        for (int y = 0; y < gtNormImg.rows; y++) {
-            for (int x = 0; x < gtNormImg.cols; x++) {
-                Vec3i gtN_int = (Vec3i)gtNormImg.at<Vec<uint16_t, 3>>(y, x);
-                gtN_int = gtN_int - Vec3i(32767, 32767, 32767);
-
-                if (gtN_int(0) == gtN_int(1) && gtN_int(0) == gtN_int(2) &&
-                    gtN_int(0) == 0) {
-                    continue;
-                    // gtN_int = Vec3i(0,0,0);
-                }
-                groundTruthNormals(y, x) =
-                    normalize((Vec3f)gtN_int);  // get rid of scaling
-            }
-        }
-    }
-
-    // Read initial seeds from disk if available
-    if (!inputFiles.seed_file.empty()) {
-        // TODO
-    }
-
+    
     size_t avail;
     size_t used;
     size_t total;
@@ -873,105 +846,10 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
         }
     }
 
-    // Code to test line refinement
-    // int p1u = 196;
-    // int p1v = 1225;
-    // int p2u = 200;
-    // int p2v = 1400;
-    // lineMap[p1u][p1v].depth = 1.0675795;
-    // lineMap[p1u][p1v].unitDirection << 1, 0, 0;
-
-    // // lineMap[p2u][p2v].depth = 1.0675795;
-    // lineMap[p2u][p2v].depth = 1.0255795;
-    // lineMap[p2u][p2v].unitDirection << -0.12800153, -0.68858582, 0.7137683;
-
-    // samplePoints(
-    //     numImages,
-    //     algParams.k,
-    //     algParams.rk,
-    //     Vec2i(p1u, p1v),
-    //     lineMap[p1u][p1v],
-    //     cameraParams.cameras,
-    //     inputFiles.img_filenames,
-    //     inputFiles.images_folder,
-    //     "./line_projections_before_update/",
-    //     true
-    // );
-
-    // Line updatedLineParams = refineLine(
-    //     Vec2i(p1u, p1v),
-    //     lineMap[p1u][p1v],
-    //     Vec2i(p2u, p2v),
-    //     lineMap[p2u][p2v],
-    //     cameraParams.cameras[0].C,
-    //     cameraParams.cameras[0].K_inv,
-    //     cameraParams.cameras[0].Rt_extended_inv,
-    //     cameraParams.cameras[0].Rt
-    // );
-
-    // cout << "updatedLineParams" << updatedLineParams.depth << " " <<
-    // updatedLineParams.unitDirection << endl;
-
-    // samplePoints(
-    //     numImages,
-    //     algParams.k,
-    //     algParams.rk,
-    //     Vec2i(p1u, p1v),
-    //     updatedLineParams,
-    //     cameraParams.cameras,
-    //     inputFiles.img_filenames,
-    //     inputFiles.images_folder,
-    //     "./line_projections_after_update/",
-    //     true
-    // );
-
     int u = 196;
     int v = 1225;
     cout << "Using pixel coord: " << u << " " << v << endl;
     cout << "Using reference image: " << inputFiles.img_filenames[0] << endl;
-
-    vector<vector<Vec2f>> points = samplePoints(
-        numImages, algParams.k, algParams.rk, Vec2i(u, v), lineMap[u][v],
-        cameraParams.cameras, inputFiles.img_filenames,
-        inputFiles.images_folder, "./line_projections/", true);
-
-    for (int a = 0; a < 16; a++) {
-        cout << "view" << a << "\n";
-        for (int b = 0; b < 41; b++) {
-            cout << points[a][b][0] << " " << points[a][b][1] << "\n";
-        }
-    }
-
-    // for (int i = 0; i < 16; i++) {
-    //     cout << i << "\n";
-    //     cout << "The " << i << "th view:\n";
-    //     for (int j = 0; j < 41; j++) {
-    //         cout << "The " << j << "th sample:\n";
-    //         cout << points[i][j] << "\n";
-    //     }
-    // }
-    // cout << endl;
-
-    //     vector<vector<float>> GetIntensityValue_cv(const vector<string>&
-    //     imagepath, const vector<vector<Vec2f>>& points)
-    // {
-    // 	vector<vector<float>> intensity(16, vector<float>(41));
-    // 	for (int i = 0; i < 16; i++)
-    // 	{
-    // 		Mat image_1 = cv::imread(imagepath[i], IMREAD_GRAYSCALE);
-    // 		for (int j = 0; j < 41; j++)
-    // 		{
-    // 			intensity[i][j] =
-    // static_cast<float>(image_1.at<uchar>(int(points[i][j][0]),
-    // int(points[i][j][1])));
-    // 		}
-    // 	}
-    // 	return intensity;
-    // }
-
-    // vector<vector<float>> intensity(16, vector<float>(41));
-    // intensity = GetIntensityValue_cv(inputFiles.img_filenames, points);
-    cout << "Successfully get the intensity values!\n";
 
     // allocation for disparity and normal stores
     vector<Mat_<float>> disp(algParams.num_img_processed);
@@ -1123,6 +1001,9 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     else
         addImageToTextureFloatGray(img_grayscale_float, gs->imgs, gs->cuArray);
 
+    addImageToTextureFloatGray(orientationMapsFloat, gs->orientaionMap, gs->cuArrayOrient);
+    addImageToTextureFloatGray(confidenceValuesFloat, gs->confidenceValue, gs->cuArrayConf);
+
     cudaMemGetInfo(&avail, &total);
     used = total - avail;
     // printf("Device memory used: %fMB\n", used/1000000.0f);
@@ -1131,12 +1012,24 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
         Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC3);
     Mat_<float> cudadisp =
         Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1);
+    Mat_<float> lineCost =
+        Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1);
+    Mat_<float> lineDepth =
+        Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1);
+    Mat_<Vec3f> lineDirection =
+        Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC3);
+    float c = 0.f;
     for (int i = 0; i < img_grayscale[0].cols; i++)
         for (int j = 0; j < img_grayscale[0].rows; j++) {
             int center = i + img_grayscale[0].cols * j;
             float4 n = gs->lines->norm4[center];
             norm0(j, i) = Vec3f(n.x, n.y, n.z);
             cudadisp(j, i) = gs->lines->norm4[i + img_grayscale[0].cols * j].w;
+            lineCost(j, i) = gs->lines->lineCost[i + img_grayscale[0].cols * j];
+            lineDepth(j, i) = gs->lines->depth[center];
+            float3 direction = gs->lines->unitDirection[center];
+            lineDirection(j, i) = Vec3f(direction.x, direction.y, direction.z);
+            c += lineCost(j, i);
         }
 
     Mat_<Vec3f> norm0disp = norm0.clone();
@@ -1171,6 +1064,24 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     sprintf(outputPath, "%s/normals.dmb", outputFolder);
     writeDmbNormal(outputPath, norm0);
 
+    // store depth
+    sprintf(outputPath, "%s/depth.dmb", outputFolder);
+    writeDmb(outputPath, lineDepth);
+
+    // store directions
+    sprintf(outputPath, "%s/directions.dmb", outputFolder);
+    writeDmbNormal(outputPath, lineDirection);
+
+    // directions image
+    Mat_<Vec3f> dir0disp = lineDirection.clone();
+    Mat dir_display;
+    getNormalsForDisplay(dir0disp, dir_display);
+    testImg_display.copyTo(
+        dir_display(Rect(cols - testImg_display.cols, 0,
+                            testImg_display.cols, testImg_display.rows)));
+    writeImageToFile(outputFolder, "directions", dir_display);
+    dir_display.release();
+
     Mat_<float> distImg;
 
     for (size_t i = 0; i < (size_t)algParams.num_img_processed; i++) {
@@ -1182,6 +1093,16 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
 
         storePlyFileBinary(plyFile, disp0, norm0, img_grayscale[i],
                            camParamsNotTransformed.cameras[i], distImg);
+
+        char plyFileLineMap[256];
+        sprintf(plyFileLineMap, "%s/3d_model_line_map%zu.ply", outputFolder, i);
+
+        char plyFileLineMapDirections[256];
+        sprintf(plyFileLineMapDirections, "%s/3d_model_line_map_direction%zu.ply", outputFolder, i);
+    
+        storeLineMapPlyFileBinary(plyFileLineMap, plyFileLineMapDirections, lineDepth, lineDirection, img_grayscale[i],
+                           camParamsNotTransformed.cameras[i]);
+
         Mat dist_display, dist_display_col;
         getDisparityForDisplay(distImg, dist_display, dist_display_col,
                                algParams.max_disparity);
@@ -1249,104 +1170,6 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
 
     cout << "Total runtime including disk i/o: " << rt << "sec" << endl;
 
-    // ground truth comparison
-    if (gtParameters.gtCheck) {
-        // postprocessing
-        Mat_<uchar> valid =
-            Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_8U);
-        Mat_<uchar> errorImg = Mat::zeros(rows, cols, CV_8U);
-        Mat_<uchar> errorImgNocc = Mat::zeros(rows, cols, CV_8U);
-        Mat_<uchar> errorImgNocc2 = Mat::zeros(rows, cols, CV_8U);
-        Mat_<uchar> errorImgValid(rows, cols, 255);
-        Mat_<uchar> nonerrorImg =
-            Mat::zeros(groundTruthDisp.rows, groundTruthDisp.cols, CV_8U);
-
-        float error = 0, errorNocc = 0, errorValid = 0, errorValidAll = 0,
-              error2 = 0;
-
-        // error after post processing
-        float med_error, med_error2;
-        computeError(groundTruthDisp, groundTruthDispNocc, disp_median,
-                     errorImg, errorImgNocc, errorImgNocc2, nonerrorImg,
-                     med_error, med_error2, errorNocc, errorValid,
-                     errorValidAll, gtParameters, valid, errorImgValid);
-
-        // error before post processing
-        results.valid_pixels_gt = computeError(
-            groundTruthDisp, groundTruthDispNocc, disp0, errorImg, errorImgNocc,
-            errorImgNocc2, nonerrorImg, error, error2, errorNocc, errorValid,
-            errorValidAll, gtParameters, valid, errorImgValid);
-
-        float normalError = 0.0f;
-        float normalError2 = 0.0f;
-        if (!inputFiles.gt_normal_filename.empty()) {
-            Mat_<float> normalErrorMap = Mat::zeros(rows, cols, CV_32F);
-            normalError =
-                computeNormalError(norm0, groundTruthNormals, 0.2f, 0.3f,
-                                   normalErrorMap, normalError2);
-            Mat normalErrorMapDisplay;
-            normalize(normalErrorMap, normalErrorMapDisplay, 0, 65535,
-                      NORM_MINMAX, CV_16U);
-            writeImageToFile(outputFolder, "errorNormal",
-                             normalErrorMapDisplay);
-        }
-
-        results.error_occ = error;
-        results.error_noc = errorNocc;
-        results.error_valid = errorValid;
-        results.error_valid_all = errorValidAll;
-
-        // char outputPath[256];
-        sprintf(outputPath, "%s/finalErrorCont.png", outputFolder);
-        imwrite(outputPath, errorImg);
-
-        char outputName[256];
-        sprintf(outputName, "Error (all): %f, Error (nocc) %f", error,
-                errorNocc);
-
-        sprintf(outputPath, "%s/finalErrorBin_10.png", outputFolder);
-        imwrite(outputPath, errorImgNocc);
-
-        sprintf(outputPath, "%s/finalErrorBin_2.png", outputFolder);
-        imwrite(outputPath, errorImgNocc2);
-
-        sprintf(outputPath, "%s/finalErrorValidOcclusionCheck.png",
-                outputFolder);
-        imwrite(outputPath, errorImgValid);
-
-        sprintf(outputPath, "%s/finalNonError.png", outputFolder);
-        imwrite(outputPath, nonerrorImg);
-
-        myfile.open(resultsFile, ios::out | ios::app);
-        myfile << "Valid pixels of GT subset: " << results.valid_pixels_gt
-               << endl
-               << endl;
-        myfile << "Error1: " << error << endl;
-        myfile << "Correct1: " << 1 - error << endl;
-        myfile << "Error2: " << error2 << endl;
-        myfile << "Correct2: " << 1 - error2 << endl;
-        myfile << "\n\nError (nocc): " << errorNocc << endl;
-        myfile << "Error (valid occlusion check): " << errorValid << endl;
-        myfile << "Error (valid occlusion check, div by #GT points): "
-               << errorValidAll << endl;
-        myfile << "\nError after median filtering: " << med_error
-               << ", thresh 2: " << med_error2 << endl;
-        myfile << "Correct %: " << 1 - med_error
-               << " (thresh 2: " << 1 - med_error2 << ")" << endl;
-        myfile << "\nNormal error (0.2rad): " << normalError << endl;
-        myfile << "\nNormal error2 (0.3rad): " << normalError2 << endl;
-        myfile.close();
-
-        cout << "Error1: " << error << endl;
-        cout << "Correct1: " << 1 - error << endl;
-        cout << "Error2: " << error2 << endl;
-        cout << "Correct2: " << 1 - error2 << endl;
-        cout << "Error (nocc): " << errorNocc << endl;
-        cout << "Error (valid occlusion check): " << errorValid << endl;
-        cout << "Error (valid occlusion check, div by #GT points): "
-             << errorValidAll << endl;
-    }
-
     if (algParams.num_img_processed >= 2) {
         Mat planes_display, planescalib_display, planescalib_display2;
 
@@ -1354,26 +1177,13 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
         planes_display.release();
     }
 
-    if (gtParameters.gtCheck) {
-        Mat gt_col;
-        double minVal, maxVal;
-        minMaxLoc(groundTruthDisp, &minVal, &maxVal);
-        cout << "minmax" << minVal << " " << maxVal << endl;
-        Mat gt8;
-        groundTruthDisp.convertTo(
-            gt8, CV_8U,
-            255.f / (float)(algParams.max_disparity * gtParameters.divFactor));
-        minMaxLoc(gt8, &minVal, &maxVal);
-        cout << "minmax" << minVal << " " << maxVal << endl;
-        applyColorMap(gt8, gt_col, COLORMAP_JET);
-        // writeImageToFile(outputFolder,"groundTruth_color",gt_col);
-    }
-
     // cudaMemGetInfo( &avail, &total );
     // used = total - avail;
     // printf("Device memory used: %fMB\n", used/1000000.0f);
     //  Free memory
     delTexture(algParams.num_img_processed, gs->imgs, gs->cuArray);
+    delTexture(algParams.num_img_processed, gs->orientaionMap, gs->cuArrayOrient);
+    delTexture(algParams.num_img_processed, gs->confidenceValue, gs->cuArrayConf);
     delete gs;
     delete &algParams;
     cudaDeviceSynchronize();

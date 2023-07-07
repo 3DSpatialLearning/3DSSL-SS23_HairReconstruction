@@ -131,6 +131,162 @@ static void storePlyFileBinaryPointCloud (char* plyFilePath, PointCloudList &pc,
     }
     fclose(outputPly);
 }
+
+static void storePointCloudBinaryWithDirections(char* filePath, PointCloudList &pc) {
+    cout << "store 3D points and directions to file" << endl;
+
+    FILE *outputFile;
+    outputFile=fopen(filePath,"wb");
+
+    const long int pointsCount = pc.size;
+
+    fwrite(&pointsCount, sizeof(pointsCount), 1, outputFile);
+
+    for(long int i = 0; i < pc.size; i++) {
+        const Point_li &p = pc.points[i];
+        const float4 direction = p.normal;
+        float4 position = p.coord;
+        fwrite(&position.x, sizeof(position.x), 1, outputFile);
+        fwrite(&position.y, sizeof(position.y), 1, outputFile);
+        fwrite(&position.z, sizeof(position.z), 1, outputFile);
+
+        fwrite(&direction.x, sizeof(direction.x), 1, outputFile);
+        fwrite(&direction.y, sizeof(direction.y), 1, outputFile);
+        fwrite(&direction.z, sizeof(direction.z), 1, outputFile);
+    }
+
+    fclose(outputFile);
+}
+
+
+static void readPointCloudBinaryWithDirections(char* filePath) {
+    cout << "read 3D points and directions to file" << endl;
+    std::ifstream file(filePath, std::ios::binary);
+
+    long int pointsCount;
+    file.read(reinterpret_cast<char *>(&pointsCount), sizeof(long int));
+
+    cout << "points count: " << pointsCount << endl;
+
+    std::vector<float> data(6 * pointsCount);
+    file.read(reinterpret_cast<char*>(&data[0]), 6 * pointsCount*sizeof(float));
+    for(size_t i = 0; i < data.size(); i++) {
+        std::cout << data[i] << "\n";
+    }
+
+    file.close();
+}
+
+static void storePlyFileBinaryPointCloudWithDirections(char* plyFilePath,char* plyDirectionFilePath, PointCloudList &pc) {
+    cout << "store 3D points to ply file" << endl;
+
+    FILE *outputPly;
+    outputPly=fopen(plyFilePath,"wb");
+
+    /*write header*/
+    fprintf(outputPly, "ply\n");
+    fprintf(outputPly, "format binary_little_endian 1.0\n");
+    fprintf(outputPly, "element vertex %d\n",pc.size);
+    fprintf(outputPly, "property float x\n");
+    fprintf(outputPly, "property float y\n");
+    fprintf(outputPly, "property float z\n");
+    fprintf(outputPly, "property float nx\n");
+    fprintf(outputPly, "property float ny\n");
+    fprintf(outputPly, "property float nz\n");
+    fprintf(outputPly, "property uchar red\n");
+    fprintf(outputPly, "property uchar green\n");
+    fprintf(outputPly, "property uchar blue\n");
+    fprintf(outputPly, "end_header\n");
+
+    //write data
+#pragma omp parallel for
+    for(long int i = 0; i < pc.size; i++) {
+        const Point_li &p = pc.points[i];
+        const float4 normal = p.normal;
+        float4 X = p.coord;
+        const char color = (int)p.texture;
+        /*const int color = 127.0f;*/
+        /*printf("Writing point %f %f %f\n", X.x, X.y, X.z);*/
+
+        if(!(X.x < FLT_MAX && X.x > -FLT_MAX) || !(X.y < FLT_MAX && X.y > -FLT_MAX) || !(X.z < FLT_MAX && X.z >= -FLT_MAX)){
+            X.x = 0.0f;
+            X.y = 0.0f;
+            X.z = 0.0f;
+        }
+#pragma omp critical
+        {
+            /*myfile << X.x << " " << X.y << " " << X.z << " " << normal.x << " " << normal.y << " " << normal.z << " " << color << " " << color << " " << color << endl;*/
+            fwrite(&X.x,      sizeof(X.x), 1, outputPly);
+            fwrite(&X.y,      sizeof(X.y), 1, outputPly);
+            fwrite(&X.z,      sizeof(X.z), 1, outputPly);
+            fwrite(&normal.x, sizeof(normal.x), 1, outputPly);
+            fwrite(&normal.y, sizeof(normal.y), 1, outputPly);
+            fwrite(&normal.z, sizeof(normal.z), 1, outputPly);
+            fwrite(&color,  sizeof(char), 1, outputPly);
+            fwrite(&color,  sizeof(char), 1, outputPly);
+            fwrite(&color,  sizeof(char), 1, outputPly);
+        }
+
+    }
+    fclose(outputPly);
+
+
+
+    FILE *outputDirectionsPly;
+    outputDirectionsPly = fopen(plyDirectionFilePath, "wb");
+    int samplesAlongDirection = 4;
+
+    // write header
+    fprintf(outputDirectionsPly, "ply\n");
+    fprintf(outputDirectionsPly, "format binary_little_endian 1.0\n");
+    fprintf(outputPly, "element vertex %d\n",pc.size * samplesAlongDirection);
+    fprintf(outputDirectionsPly, "property float x\n");
+    fprintf(outputDirectionsPly, "property float y\n");
+    fprintf(outputDirectionsPly, "property float z\n");
+    fprintf(outputDirectionsPly, "property uchar red\n");
+    fprintf(outputDirectionsPly, "property uchar green\n");
+    fprintf(outputDirectionsPly, "property uchar blue\n");
+    fprintf(outputDirectionsPly, "end_header\n");
+
+    char redC = 255;
+    char greenC = 0;
+    char blueC = 0;
+
+
+#pragma omp parallel for
+    for(long int i = 0; i < pc.size; i++) {
+        const Point_li &p = pc.points[i];
+        const float4 direction = p.normal;
+        float4 X = p.coord;
+
+
+        if(!(X.x < FLT_MAX && X.x > -FLT_MAX) || !(X.y < FLT_MAX && X.y > -FLT_MAX) || !(X.z < FLT_MAX && X.z >= -FLT_MAX)){
+            X.x = 0.0f;
+            X.y = 0.0f;
+            X.z = 0.0f;
+        }
+            
+            for(int sampleIdx = 1; sampleIdx <= samplesAlongDirection; sampleIdx++) {
+                float3 ptX2;
+                ptX2.x = X.x + + std::pow(-1, sampleIdx) * (0.00001f) * sampleIdx * direction.x;
+                ptX2.y = X.y + + std::pow(-1, sampleIdx) * (0.00001f) * sampleIdx * direction.y;
+                ptX2.z = X.z + + std::pow(-1, sampleIdx) * (0.00001f) * sampleIdx * direction.z;
+#pragma omp critical
+            {
+                fwrite(&ptX2.x,      sizeof(ptX2.x), 1, outputPly);
+                fwrite(&ptX2.y,      sizeof(ptX2.y), 1, outputPly);
+                fwrite(&ptX2.z,      sizeof(ptX2.z), 1, outputPly);
+                fwrite(&redC, sizeof(redC), 1, outputDirectionsPly);
+                fwrite(&greenC, sizeof(greenC), 1, outputDirectionsPly);
+                fwrite(&blueC, sizeof(blueC), 1, outputDirectionsPly);
+            }
+        }
+        
+    }
+
+    fclose(outputDirectionsPly);
+}
+
 static void storeXYZPointCloud (char* plyFilePath, PointCloudList &pc) {
     cout << "store 3D points to ply file" << endl;
 

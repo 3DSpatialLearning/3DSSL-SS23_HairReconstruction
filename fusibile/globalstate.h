@@ -32,10 +32,14 @@ public:
    // PointCloud *pc_list;
 
     cudaTextureObject_t imgs  [MAX_IMAGES];
-    cudaTextureObject_t normals_depths  [MAX_IMAGES]; // first 3 values normal, fourth depth
+    // cudaTextureObject_t normals_depths  [MAX_IMAGES]; // first 3 values normal, fourth depth
     /*cudaTextureObject_t depths  [MAX_IMAGES];*/
     //cudaTextureObject_t gradx [MAX_IMAGES];
     //cudaTextureObject_t grady [MAX_IMAGES];
+
+
+    cudaTextureObject_t depths[MAX_IMAGES];
+    cudaTextureObject_t directions[MAX_IMAGES];
     void resize(int n)
     {
         printf("Resizing globalstate to %d\n", n);

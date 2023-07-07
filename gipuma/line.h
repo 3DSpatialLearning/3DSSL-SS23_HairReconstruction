@@ -1,5 +1,6 @@
-#pragma once 
+#pragma once
 
+// TODO: Remove once we use Line_cu only
 struct Line {
     // Z coord of 3D point in reference camera frame coord system
     float depth;

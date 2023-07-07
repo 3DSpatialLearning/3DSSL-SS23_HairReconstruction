@@ -28,18 +28,11 @@ void writeSamplesToImage(vector<Vec2f> samples, const char* outputFolder,
                          string inputImageName);
 
 vector<vector<Vec2f>> samplePoints(
-    size_t numViews,
-    int k,
-    float rk,
-    Vec2i pixelCoord,
-    Line line,
-    vector<Camera> cameras,
-    vector<string> imageFilenames,
-    string images_folder,
-    const char* lineProjectionImagesFolder,
-    bool writeSamplesInImages = false
-) {
-    // referenceImage is always the first image passed as an argument to ./gipuma
+    size_t numViews, int k, float rk, Vec2i pixelCoord, Line line,
+    vector<Camera> cameras, vector<string> imageFilenames, string images_folder,
+    const char* lineProjectionImagesFolder, bool writeSamplesInImages = false) {
+    // referenceImage is always the first image passed as an argument to
+    // ./gipuma
     int referenceImageIndex = 0;
 
     const int u = pixelCoord[0];
@@ -58,16 +51,14 @@ vector<vector<Vec2f>> samplePoints(
 
     // cout << "pluckerCoord: " << pluckerCoord.t() << endl;
 
-    Vec2f lineInRef0UnitVector(
-        u - pixel2[0],
-        v - pixel2[1]
-    );
+    Vec2f lineInRef0UnitVector(u - pixel2[0], v - pixel2[1]);
     normalize(lineInRef0UnitVector, lineInRef0UnitVector);
 
     Vec2f originalPixel(u, v);
     vector<Vec2f> samples;
-    for (int i = -k/2; i <= k/2 ; i++) {
-        Vec2f samplePixel = originalPixel + 2 * i * rk * lineInRef0UnitVector / k;
+    for (int i = -k / 2; i <= k / 2; i++) {
+        Vec2f samplePixel =
+            originalPixel + 2 * i * rk * lineInRef0UnitVector / k;
         samples.push_back(samplePixel);
     }
 
@@ -77,22 +68,21 @@ vector<vector<Vec2f>> samplePoints(
         for (int j = 0; j < k; j++) {
             Vec2f samplePixel = samples[j];
 
-            const Vec3f pointWorldCoord = projectSamplePointIn3D(samplePixel, P1, line, cameras[referenceImageIndex].K_inv, cameras[referenceImageIndex].Rt);
-            const Vec2f sampleImage1Coord = projectPointToImage(pointWorldCoord, cameras[i].P);
+            const Vec3f pointWorldCoord = projectSamplePointIn3D(
+                samplePixel, P1, line, cameras[referenceImageIndex].K_inv,
+                cameras[referenceImageIndex].Rt);
+            const Vec2f sampleImage1Coord =
+                projectPointToImage(pointWorldCoord, cameras[i].P);
             samplesInImage.push_back(sampleImage1Coord);
         }
         samplesInImages[i] = samplesInImage;
     }
 
     if (writeSamplesInImages) {
-        for (int i = 0; i < numViews ; i++) {
-            writeSamplesToImage(
-                samplesInImages[i],
-                lineProjectionImagesFolder,
-                imageFilenames[i],
-                images_folder,
-                imageFilenames[i]
-            );
+        for (int i = 0; i < numViews; i++) {
+            writeSamplesToImage(samplesInImages[i], lineProjectionImagesFolder,
+                                imageFilenames[i], images_folder,
+                                imageFilenames[i]);
         }
     }
 
@@ -103,19 +93,11 @@ Vec3f getPointOn3DLine(const Vec3f& p, Line line) {
     return p + line.unitDirection;
 }
 
-Vec2f projectLineIntoImagePlane(
-    const Vec3f& point,
-    const Line& line,
-    Mat_<float>& K,
-    const Mat_<float>& Rt
-) {
+Vec2f projectLineIntoImagePlane(const Vec3f& point, const Line& line,
+                                const Mat_<float>& K, const Mat_<float>& Rt) {
     Vec4f A(point[0], point[1], point[2], 1);
-    Vec4f B(
-        point[0] + line.unitDirection[0],
-        point[1] + line.unitDirection[1],
-        point[2] + line.unitDirection[2],
-        1
-    );
+    Vec4f B(point[0] + line.unitDirection[0], point[1] + line.unitDirection[1],
+            point[2] + line.unitDirection[2], 1);
 
     Matx<float, 4, 4> L = A * B.t() - B * A.t();
     Mat_<float> P = K * Rt;
@@ -133,7 +115,8 @@ Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point,
                              const Mat_<float>& Rt) {
     const Vec3f samplePointPixelHomogenCoord(samplePoint[0], samplePoint[1], 1);
 
-    const Mat_<float> samplePointCameraCoord = K_inv * samplePointPixelHomogenCoord;
+    const Mat_<float> samplePointCameraCoord =
+        K_inv * samplePointPixelHomogenCoord;
 
     const float t1 = Rt(0, 3);
     const float t2 = Rt(1, 3);
@@ -164,24 +147,16 @@ Vec3f projectSamplePointIn3D(Vec2f samplePoint, const Vec3f& Point,
     return Point + lambda * line.unitDirection;
 }
 
-void writeSamplesToImage(
-    vector<Vec2f> samples,
-    const char* outputFolder,
-    string outputFileName,
-    string inputImageFolder,
-    string inputImageName
-) {
+void writeSamplesToImage(vector<Vec2f> samples, const char* outputFolder,
+                         string outputFileName, string inputImageFolder,
+                         string inputImageName) {
     // TODO: do not re-read images
     Mat imageMatrix = readImage(inputImageFolder, inputImageName);
     for (unsigned int i = 0; i < samples.size(); i++) {
-        if (
-            samples[i][1] < 0 ||
-            samples[i][1] > imageMatrix.rows - 1 ||
-            samples[i][0] < 0 ||
-            samples[i][0] > imageMatrix.cols - 1
-        ) {
-            cout << "Note: sample is outside of image dimension (u, v): (" << samples[i][0] <<
-                ", " << samples[i][1] << ")\n";
+        if (samples[i][1] < 0 || samples[i][1] > imageMatrix.rows - 1 ||
+            samples[i][0] < 0 || samples[i][0] > imageMatrix.cols - 1) {
+            cout << "Note: sample is outside of image dimension (u, v): ("
+                 << samples[i][0] << ", " << samples[i][1] << ")\n";
             continue;
         }
 

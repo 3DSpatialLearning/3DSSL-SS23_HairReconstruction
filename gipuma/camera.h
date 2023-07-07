@@ -12,6 +12,10 @@ class Camera_cu : public Managed {
     float* M_inv;
     float* R;
     float* R_orig_inv;
+
+    float* Rt; // 3x4 matrix: [R | t]
+    float* Rt_extended; // 4x4 matrix: [R | t, [0 0 0 1]]
+    float* Rt_extended_inv; // inverse matrix of Rt_extended
     float4 t4;
     float4 C4;
     float fx;
@@ -49,6 +53,9 @@ class Camera_cu : public Managed {
         checkCudaErrors(cudaMallocManaged(&K_inv, sizeof(float) * 4 * 4));
         checkCudaErrors(cudaMallocManaged(&R, sizeof(float) * 4 * 4));
         checkCudaErrors(cudaMallocManaged(&R_orig_inv, sizeof(float) * 4 * 4));
+        checkCudaErrors(cudaMallocManaged(&Rt, sizeof(float) * 4 * 4));
+        checkCudaErrors(cudaMallocManaged(&Rt_extended, sizeof(float) * 4 * 4));
+        checkCudaErrors(cudaMallocManaged(&Rt_extended_inv, sizeof(float) * 4 * 4));
     }
     ~Camera_cu() {
         cudaFree(P);
@@ -58,5 +65,8 @@ class Camera_cu : public Managed {
         cudaFree(K_inv);
         cudaFree(R);
         cudaFree(R_orig_inv);
+        cudaFree(Rt);
+        cudaFree(Rt_extended);
+        cudaFree(Rt_extended_inv);
     }
 };
