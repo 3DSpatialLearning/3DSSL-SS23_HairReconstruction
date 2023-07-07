@@ -4,7 +4,7 @@ warping="../fusibile/fusibile"
 inputdir="data/97_frame_00005/"
 orientaionMapsDir="data/97_frame_00005/orient"
 confidenceValuesDir="data/97_frame_00005/conf"
-batch_name="97_frame_00005_cam"
+batch_name="97_frame_00005"
 output_dir_basename="results/$batch_name"
 p_folder="data/97_frame_00005/cam_par.txt"
 scale=1
@@ -19,68 +19,69 @@ image_list_array=`( cd $inputdir && ls *.png) `
 output_dir=${output_dir_basename}/
 
 # fuse options
-disp_thresh=7
-normal_thresh=70
-num_consistent=3
+disp_thresh=0.001
+normal_thresh=10
+num_consistent=2
 min_angle=30
 max_angle=90
 
 # strand accurate hair reconstruction params
-k=41
+k=21
 rk=10
 
-# Temporary run Gipuma only once
-cmd="./gipuma cam_222200045.png cam_220700191.png cam_221501007.png cam_222200036.png cam_222200037.png cam_222200038.png cam_222200039.png cam_222200040.png cam_222200041.png cam_222200042.png cam_222200043.png cam_222200044.png cam_222200046.png cam_222200047.png cam_222200048.png cam_222200049.png
-    -images_folder $inputdir
-    -krt_file $p_folder
-    -output_folder $output_dir
-    -no_display
-    --cam_scale=$scale
-    --iterations=$iter
-    --blocksize=$blocksize
-    --cost_gamma=$cost_gamma
-    --cost_comb=best_n
-    --n_best=$n_best
-    --depth_max=$depth_max
-    --depth_min=$depth_min
-    --min_angle=$min_angle
-    --max_angle=$max_angle
-    -color_processing
-    -k=$k
-    -rk=$rk
-    -orientation_maps_folder $orientaionMapsDir
-    -confidence_values_folder $confidenceValuesDir"
-echo $cmd
-$cmd
-
-
 # Runs gipuma for each image 
-# #warping conf
-# count=0
-# for im in $image_list_array
-# do
-#     echo $count
-#     img=${im%.png}
-#     cmd_file=${output_dir}/$img-cmd.log
-#     image_list=( $im )
+# warping conf
+count=0
+for im in $image_list_array
+do
+    echo $count
+    img=${im%.png}
+    cmd_file=${output_dir}/$img-cmd.log
+    image_list=( $im )
 
-#     mkdir -p $output_dir
-#     for ij in $image_list_array
-#     do
-# 	if [ $im != $ij ]
-# 	then
-# 	    image_list+=( $ij )
-# 	fi
-#     done
-#     cmd="$prog ${image_list[@]} -images_folder $inputdir -krt_file $p_folder -output_folder $output_dir -no_display --cam_scale=$scale --iterations=$iter --blocksize=$blocksize --cost_gamma=$cost_gamma --cost_comb=best_n --n_best=$n_best --depth_max=$depth_max --depth_min=$depth_min --min_angle=$min_angle --max_angle=$max_angle -color_processing -k=$k -rk=$rk"
-#     echo $cmd
-#     $cmd
+    mkdir -p $output_dir
+    for ij in $image_list_array
+    do
+	if [ $im != $ij ]
+	then
+	    image_list+=( $ij )
+	fi
+    done
+    cmd="$prog ${image_list[@]}
+        -images_folder $inputdir
+        -krt_file $p_folder
+        -output_folder $output_dir
+        -no_display
+        --cam_scale=$scale
+        --iterations=$iter
+        --blocksize=$blocksize
+        --cost_gamma=$cost_gamma
+        --cost_comb=best_n
+        --n_best=$n_best
+        --depth_max=$depth_max
+        --depth_min=$depth_min
+        --min_angle=$min_angle
+        --max_angle=$max_angle
+        -color_processing
+        -k=$k
+        -rk=$rk
+        -orientation_maps_folder $orientaionMapsDir
+        -confidence_values_folder $confidenceValuesDir"
+    echo $cmd
+    $cmd
 
     
-#     let "count += 1"
+    let "count += 1"
 
-#     if [ $count -eq -1 ]
-#     then
-# 	    break
-#     fi
-# done
+    if [ $count -eq -1 ]
+    then
+	    break
+    fi
+done
+
+
+# Fuse point clouds
+cmd="$warping -input_folder $output_dir -krt_file $p_folder -images_folder $inputdir --cam_scale=$scale --depth_min=$depth_min --depth_max=$depth_max --disp_thresh=$disp_thresh --normal_thresh=$normal_thresh --num_consistent=$num_consistent"
+echo cmd
+$cmd
+

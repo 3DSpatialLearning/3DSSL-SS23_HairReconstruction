@@ -132,6 +132,50 @@ static void storePlyFileBinaryPointCloud (char* plyFilePath, PointCloudList &pc,
     fclose(outputPly);
 }
 
+static void storePointCloudBinaryWithDirections(char* filePath, PointCloudList &pc) {
+    cout << "store 3D points and directions to file" << endl;
+
+    FILE *outputFile;
+    outputFile=fopen(filePath,"wb");
+
+    const long int pointsCount = pc.size;
+
+    fwrite(&pointsCount, sizeof(pointsCount), 1, outputFile);
+
+    for(long int i = 0; i < pc.size; i++) {
+        const Point_li &p = pc.points[i];
+        const float4 direction = p.normal;
+        float4 position = p.coord;
+        fwrite(&position.x, sizeof(position.x), 1, outputFile);
+        fwrite(&position.y, sizeof(position.y), 1, outputFile);
+        fwrite(&position.z, sizeof(position.z), 1, outputFile);
+
+        fwrite(&direction.x, sizeof(direction.x), 1, outputFile);
+        fwrite(&direction.y, sizeof(direction.y), 1, outputFile);
+        fwrite(&direction.z, sizeof(direction.z), 1, outputFile);
+    }
+
+    fclose(outputFile);
+}
+
+
+static void readPointCloudBinaryWithDirections(char* filePath) {
+    cout << "read 3D points and directions to file" << endl;
+    std::ifstream file(filePath, std::ios::binary);
+
+    long int pointsCount;
+    file.read(reinterpret_cast<char *>(&pointsCount), sizeof(long int));
+
+    cout << "points count: " << pointsCount << endl;
+
+    std::vector<float> data(6 * pointsCount);
+    file.read(reinterpret_cast<char*>(&data[0]), 6 * pointsCount*sizeof(float));
+    for(size_t i = 0; i < data.size(); i++) {
+        std::cout << data[i] << "\n";
+    }
+
+    file.close();
+}
 
 static void storePlyFileBinaryPointCloudWithDirections(char* plyFilePath,char* plyDirectionFilePath, PointCloudList &pc) {
     cout << "store 3D points to ply file" << endl;

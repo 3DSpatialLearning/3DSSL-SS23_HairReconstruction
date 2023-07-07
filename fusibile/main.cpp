@@ -853,6 +853,10 @@ static int runFusibile (int argc,
     char plyFileDir[256];
     sprintf ( plyFileDir, "%s/final3d_modelDir.ply", output_folder);
     storePlyFileBinaryPointCloudWithDirections(plyFile, plyFileDir, pc_list);
+
+    char pointCloudBinFilePath[256];
+    sprintf ( pointCloudBinFilePath, "%s/line_cloud.dat", output_folder);
+    storePointCloudBinaryWithDirections(pointCloudBinFilePath, pc_list);
     //char xyzFile[256];
     //sprintf ( xyzFile, "%s/final3d_model.xyz", output_folder);
     //printf("Writing ply file %s\n", xyzFile);

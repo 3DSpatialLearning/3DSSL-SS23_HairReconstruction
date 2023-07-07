@@ -449,81 +449,34 @@ __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
     return intensityCost;
 }
 
-static __device__ FORCEINLINE_GIPUMA void sort_small(float *__restrict__ d,
-                                                     const int n) {
-    int j;
-    for (int i = 1; i < n; i++) {
-        float tmp = d[i];
-        for (j = i; j >= 1 && tmp < d[j - 1]; j--) d[j] = d[j - 1];
-        d[j] = tmp;
-    }
-}
-
-
 template <typename T>
-__device__ FORCEINLINE_GIPUMA static float getCombinedCosts_cu(
+__device__ FORCEINLINE_GIPUMA static float getCombinedCost_cu(
     const float geometricCostRefImage,
     float geometricCosts[20],
     const float intensityCostRefImage,
     float intensityCosts[20],
-    int selectedViewsNumber,
-    int cost_comb,
-    int n_best,
-    const int validNeighborsCount
+    const int selectedViewsNumber
 ) {
 
-    if (validNeighborsCount == 0) {
-        printf("getCombinedCosts_cu WARNING valid view count is 0!\n");
-        printf("getCombinedCosts_cu WARNING valid view count is 0!\n");
-        printf("getCombinedCosts_cu WARNING valid view count is 0!\n");
-        return MAXCOST;
-    }
-    // printf("geometricCostRefImage %f \n", geometricCostRefImage);
-    sort_small(geometricCosts, selectedViewsNumber);
-
-    int numBest = validNeighborsCount; 
-    // int numBest = validViewsCount; 
-    if (cost_comb == COMB_BEST_N)
-        numBest = min(numBest, n_best);
-
     float totalGeometricCost = 0.f;
-    totalGeometricCost += numBest * geometricCostRefImage;
-    for (int i = 0; i < numBest; i++) {
+    totalGeometricCost += selectedViewsNumber * geometricCostRefImage;
+    for (int i = 0; i < selectedViewsNumber; i++) {
         totalGeometricCost += geometricCosts[i];
     }
-    totalGeometricCost = totalGeometricCost / (2*(float)numBest + 1);
-    // totalGeometricCost = totalGeometricCost / (2*(float)numBest);
+    totalGeometricCost = totalGeometricCost / (2*(float)selectedViewsNumber + 1);
 
-    if(totalGeometricCost < -0.01f) {
-        printf("geometric cost is less than 0! %f", totalGeometricCost);
-    }
-
-
-    sort_small(intensityCosts, selectedViewsNumber);
 
     float totalIntensityCost = 0.f;
     totalIntensityCost += intensityCostRefImage;
-    for (int i = 0; i < numBest; i++) {
+    for (int i = 0; i < selectedViewsNumber; i++) {
         totalIntensityCost += intensityCosts[i];
     }
-    totalIntensityCost = totalIntensityCost / ((float)numBest + 1);
-    // totalIntensityCost = totalIntensityCost / ((float)numBest);
+    totalIntensityCost = totalIntensityCost / ((float)selectedViewsNumber + 1);
 
 
-    if(totalIntensityCost < -0.01f) {
-        printf("inten cost is less than 0! %f", totalIntensityCost);
-    }
     float alpha = 0.1;
     float cost = (1 - alpha) * totalGeometricCost + alpha * totalIntensityCost;
 
-    if (cost == 0) {
-        printf("COST IS 0, validNeighborsCount %d, totalGeometricCost %f, totalIntensityCost %f numBest %d, geometricCosts[0] 1, 2, 3: %f %f %f %f\n", validNeighborsCount,totalGeometricCost, totalIntensityCost, numBest,
-        geometricCosts[0],
-        geometricCosts[1],
-        geometricCosts[2],
-        geometricCosts[3]
-        );
-    }
     return cost;
 }
 
@@ -534,96 +487,42 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
 
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
     int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
-    // if(pixelCoord.x != 196 || pixelCoord.y  != 1225) {
-    //     return 0.f;
-    // }
-
 
     float2 samples[400];
     samplePoints_cu<T>(gs, pixelCoord, depth, unitDirection, samples);
 
-    // for (int i =0 ; i< gs.params->k; i++) {
-    //     printf("cuda %d %f %f \n", i, samples[i].x, samples[i].y);
-    // }
-
-
     const int validNeighborsCount = validNeighborsCount_cu<T>(gs, samples);
 
-
     if (validNeighborsCount == 0) {
-        // printf("WARNING valid view count is 0!\n");
-        return MAXCOST;
+        // printf("WARNING valid neighbors count is 0!\n");
+        return (selectedViewsNumber + 1) * MAXCOST;
     }
 
-    float geometricCosts[20];
     const float geometricCostRefImage = geometricCost_cu<T>(gs, samples, 0);
+    float geometricCosts[20];
     for (int i = 0; i < selectedViewsNumber; i++) {
         int cameraIdx = selectedViewsSubset[i];
         geometricCosts[i] = geometricCost_cu<T>(gs, samples, cameraIdx);
-        // printf("in for i: %d, cameraIdx: %d, cost %f\n", i, cameraIdx, geometricCosts[i]);
     }
 
-    sort_small(geometricCosts, selectedViewsNumber);
-    //     for (int i = 0; i < selectedViewsNumber; i++) {
-    //     printf("sorted in for i: %d, cost %f validNeighborsCount %d\n", i, geometricCosts[i], validNeighborsCount);
-    // }
-    // return 0.f;
 
-
-    int numBest = validNeighborsCount; 
-    if (gs.params->cost_comb == COMB_BEST_N)
-        numBest = min(numBest, gs.params->n_best);
-
-    float totalGeometricCost = 0.f;
-    totalGeometricCost += numBest * geometricCostRefImage;
-    for (int i = 0; i < numBest; i++) {
-        totalGeometricCost += geometricCosts[i];
-    }
-    totalGeometricCost = totalGeometricCost / (2*(float)numBest);
-
-    if(totalGeometricCost < -0.01f) {
-        printf("geometric cost is less than 0! %f", totalGeometricCost);
-    }
-
-    float intensityCosts[20];
+    // intensityCostRefImage is always 0
     const float intensityCostRefImage = intensityCost_cu<T>(gs, samples, 0);
-
+    float intensityCosts[20];
     for (int i = 0; i < selectedViewsNumber; i++) {
         int cameraIdx = selectedViewsSubset[i];
         intensityCosts[i] = intensityCost_cu<T>(gs, samples, cameraIdx);
     }
 
-    sort_small(intensityCosts, selectedViewsNumber);
+    float cost = getCombinedCost_cu<T>(
+            geometricCostRefImage,
+            geometricCosts,
+            intensityCostRefImage,
+            intensityCosts,
+            selectedViewsNumber
 
-    float totalIntensityCost = 0.f;
-    for (int i = 0; i < numBest; i++) {
-        totalIntensityCost += intensityCosts[i];
-    }
-    totalIntensityCost = totalIntensityCost / ((float)numBest);
-
-
-    if(totalIntensityCost < -0.01f) {
-        printf("inten cost is less than 0! %f", totalIntensityCost);
-    }
-    float alpha = 0.1;
-    float cost = (1 - alpha) * totalGeometricCost + alpha * totalIntensityCost;
-    float cost2 = getCombinedCosts_cu<T>(
-        geometricCostRefImage,
-        geometricCosts,
-        intensityCostRefImage,
-        intensityCosts,
-        selectedViewsNumber,
-        gs.params->cost_comb,
-        gs.params->n_best,
-        validNeighborsCount
     );
 
-    // if (cost != cost2) {
-    //     printf("WHAAAAT cost %f, cost2 %f\n", cost, cost2);
-    // } else {
-    //     printf("ok cost %f, cost2 %f\n", cost, cost2);
-    // }
-    // printf("geom %f int %f  total %f \n", geometricCost, intensityCost, cost);
     return cost;
 }
 
@@ -966,22 +865,22 @@ void gipuma(GlobalState &gs) {
 
     printf("initial cost: %.8f \n", getAverageCost(gs));
     cudaEventRecord(start);
-    printf("Iterations count %d", gs.params->iterations);
+    printf("Iterations count %d \n", gs.params->iterations);
     for (int it =0;it<gs.params->iterations; it++) {
         // for (int it = 0; it < maxiter; it++) {
-        printf("%d ", it + 1);
+        printf("iretation %d\n", it + 1);
         // spatial propagation of 4 closest neighbors (1px up/down/left/right)
         gipuma_black_spatialPropClose_cu<T>
             <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost black close: %.8f \n", getAverageCost(gs));
 
-
         // spatial propagation of 4 far away neighbors (5px up/down/left/right)
         gipuma_black_spatialPropFar_cu<T>
             <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost black far: %.8f \n", getAverageCost(gs));
+
         // line refinement
         gipuma_black_lineRefine_cu<T>
             <<<grid_size_initrand, block_size_initrand>>>(gs, it);
@@ -994,19 +893,18 @@ void gipuma(GlobalState &gs) {
         cudaDeviceSynchronize();
         printf("cost red close: %.8f \n", getAverageCost(gs));
 
-
-        // // spatial propagation of 4 far away neighbors (5px up/down/left/right)
+        // spatial propagation of 4 far away neighbors (5px up/down/left/right)
         gipuma_red_spatialPropFar_cu<T>
             <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost red far: %.8f \n", getAverageCost(gs));
+
         // line refinement
         gipuma_red_lineRefine_cu<T>
             <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost red refine: %.8f \n", getAverageCost(gs));
     }
-    printf("\n");
 
     // Transform directions to world space
     gipuma_compute_disp<<<grid_size_initrand, block_size_initrand>>>(gs);
