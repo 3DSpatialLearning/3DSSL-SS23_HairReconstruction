@@ -14,10 +14,11 @@
 using namespace std;
 using namespace cv;
 
-#ifndef M_PI
 #define M_PI 3.14159265358979323846
-#define HEIGHT 1100
-#define WIDTH 1604
+#define NUM_VIEW 16
+#define NUM_SAMPLE 41
+#define HEIGHT 1604
+#define WIDTH 1100
 #endif
 
 //read the orientation and confidence map
@@ -35,8 +36,10 @@ cv::Mat importFloatImage__(const std::string& filePath) {
 	try {
 		// Read the width and height from the file
 		int width, height;
-		file.read(reinterpret_cast<char*>(&height), sizeof(int));
+
 		file.read(reinterpret_cast<char*>(&width), sizeof(int));
+		file.read(reinterpret_cast<char*>(&height), sizeof(int));
+
 		// Create a cv::Mat object for the float image
 		cv::Mat floatImage(height, width, CV_64F);
 		// Read the pixel values from the file
@@ -59,11 +62,27 @@ cv::Mat importFloatImage__(const std::string& filePath) {
 //output: the insensity values at the samples position(16 views, 41 sample points per view)
 vector<vector<float>> GetIntensityValue(const vector<string>& imagepath, const vector<vector<Vec2f>>& points)
 {
-	vector<vector<float>> intensity(16, vector<float>(41));
-	for (int i = 0; i < 16; i++)
+	int valid_view = 16;
+	for (int i = 0; i < NUM_VIEW; i++)
 	{
 		Mat image_1 = cv::imread(imagepath[i], IMREAD_GRAYSCALE);
-		for (int j = 0; j < 41; j++)
+		for (int j = 0; j < NUM_SAMPLE; j++)
+		{
+			if (int(points[i][j][0]) > WIDTH || int(points[i][j][1]) > HEIGHT) {
+				i++;
+				j = 0;
+				valid_view--;
+			}
+		}
+	}
+	cout << "The valid views are " << valid_view << "\n";
+
+	vector<vector<float>> intensity(valid_view, vector<float>(NUM_SAMPLE));
+	for (int i = 0; i < valid_view; i++)
+	{
+		Mat image_1 = cv::imread(imagepath[i], IMREAD_GRAYSCALE);
+		cout << "The dimension of the image is " << image_1.rows << "x" << image_1.cols << "\n";
+		for (int j = 0; j < NUM_SAMPLE; j++)
 		{
 			intensity[i][j] = static_cast<float>(image_1.at<uchar>(int(points[i][j][1]), int(points[i][j][0])));
 		}
@@ -115,11 +134,12 @@ float computeNCC(const vector<float>& intensity_1, const vector<float>& intensit
 //output: the final intensity cost
 float ComputeIntensityCost(vector<vector<float>>& intensity) {
 	float intensity_cost = 0.0;
-	for (int i = 0; i < 15; i++)
+	int valid_view = intensity.size();
+	for (int i = 1; i < valid_view; i++)
 	{
-		intensity_cost += computeECC(intensity[0], intensity[i]);
+		intensity_cost += computeNCC(intensity[0], intensity[i]);
 	}
-	intensity_cost /= 15;
+	intensity_cost /= valid_view - 1;
 	return intensity_cost;
 }
 
@@ -127,10 +147,10 @@ float ComputeIntensityCost(vector<vector<float>>& intensity) {
 //input: the sample points for all views
 //output: the 2d projected line direction for all views
 vector<Vec2f> GetSampleDirection(vector<vector<Vec2f>>& sample_points) {
-	vector<Vec2f> sample_directions(16);
-	for (int i = 0; i < 16; i++) {
-		sample_directions[i][0] = sample_points[i][0][0] - sample_points[i][1][0];
-		sample_directions[i][1] = sample_points[i][0][1] - sample_points[i][1][1];
+	vector<Vec2f> sample_directions(NUM_VIEW);
+	for (int i = 0; i < NUM_VIEW; i++) {
+		sample_directions[i][0] = sample_points[i][0][0] - sample_points[i][NUM_SAMPLE - 1][0];
+		sample_directions[i][1] = sample_points[i][0][1] - sample_points[i][NUM_SAMPLE - 1][1];
 	}
 	return sample_directions;
 }
@@ -141,9 +161,11 @@ vector<Vec2f> GetSampleDirection(vector<vector<Vec2f>>& sample_points) {
 float angular_Diff(const Vec2f& line_direction, const float& orientation_angle)
 {
 
+
 	float line_angle = atan2(line_direction[1], line_direction[0]) * 180.0 / M_PI;
 	float angle_diff = abs(line_angle - orientation_angle * 180 / M_PI);
-	angle_diff = min(angle_diff, (float(360.0) - angle_diff));
+	angle_diff = min(angle_diff, abs(float(180.0) - angle_diff));
+	angle_diff = angle_diff * M_PI / 180.0;
 
 	return angle_diff;
 }
@@ -163,7 +185,7 @@ float geometricCost(const vector<Vec2f>& sampledirection,//sampleline directions
 	float r;
 	float r_sum = 0.0;
 
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < NUM_VIEW; i++)
 	{
 		if (i == 0)
 		{
@@ -175,14 +197,28 @@ float geometricCost(const vector<Vec2f>& sampledirection,//sampleline directions
 		float g_i = 0.0;
 		float confidence_sum = 0.0;
 
-		for (int j = 0; j < 41; j++) {
-			g_i += confidence_map[i].at<float>(int(samplepoints[i][j][0]), int(samplepoints[i][j][1]))
-				* angular_Diff(sampledirection[i], orientation_map[i].at<float>(int(samplepoints[i][j][0]), int(samplepoints[i][j][1])));
-			confidence_sum += confidence_map[i].at<float>(int(samplepoints[i][j][0]), int(samplepoints[i][j][1]));
+		for (int j = 0; j < NUM_SAMPLE; j++) {
+
+			float samples_direction = atan2(sampledirection[i][1], sampledirection[i][0]);
+			//cout << "The sampled direction is " << samples_direction << "\n";
+
+			//cout << "The confidence value is " << confidence_map[i].at<float>(int(samplepoints[i][j][0]), int(samplepoints[i][j][1])) << "\n";
+			//cout << "The orientation value is " << orientation_map[i].at<float>(int(samplepoints[i][j][0]), int(samplepoints[i][j][1])) << "\n";
+			if (int(samplepoints[i][j][1]) > HEIGHT || int(samplepoints[i][j][0]) > WIDTH) {
+				j++;
+			}
+			g_i += confidence_map[i].at<float>(int(samplepoints[i][j][1]), int(samplepoints[i][j][0]))
+				* angular_Diff(sampledirection[i], orientation_map[i].at<float>(int(samplepoints[i][j][1]), int(samplepoints[i][j][0])));
+			confidence_sum += confidence_map[i].at<float>(int(samplepoints[i][j][1]), int(samplepoints[i][j][0]));
 		}
-		g_i /= confidence_sum;
-		cost += r * g_i;
-		r_sum += r;
+		if (confidence_sum == 0) {
+			continue;
+		}
+		else {
+			g_i /= confidence_sum;
+			cost += r * g_i;
+			r_sum += r;
+		}
 	}
 	cost = cost / r_sum;
 	return cost;
@@ -203,7 +239,7 @@ float compute_costfunction(
 	float geometric_cost = 0.0;
 	float intensity_cost = 0.0;
 	geometric_cost = geometricCost(sampledirection,
-		samplepoints, 
+		samplepoints,
 		orientation_map,
 		confidence_map,
 		r0,
@@ -212,6 +248,6 @@ float compute_costfunction(
 	vector<vector<float>> intensity_value = GetIntensityValue(imagepath, samplepoints);
 	intensity_cost = ComputeIntensityCost(intensity_value);
 	float alpha = 0.1;
-	float cost_all = (1 - alpha) * geometric_cost + alpha * intensity_cost;
+	float cost_all = (1 - alpha) * geometric_cost - alpha * intensity_cost;
 	return cost_all;
 }
