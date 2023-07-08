@@ -121,8 +121,6 @@ struct Camera {
 //parameters for camera geometry setup (assuming that K1 = K2 = K, P1 = K [I | 0] and P2 = K [R | t])
 struct CameraParameters {
     CameraParameters () : rectified ( false ), idRef ( 0 ) {}
-    Mat_<float> K; //if K varies from camera to camera: K and f need to be stored within Camera
-    Mat_<float> K_inv; //if K varies from camera to camera: K and f need to be stored within Camera
     float f;
     bool rectified;
     vector<Camera> cameras;

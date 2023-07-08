@@ -344,11 +344,8 @@ CameraParameters getCameraParameters ( CameraParameters_cu &cpc, InputFiles inpu
     /*K[0](0,1)=0;*/
     /*K[0](2,2)=1;*/
 
-    //assuming K is the same for all cameras
-    params.K = scaleK ( K[0],scaleFactor );
-    params.K_inv = params.K.inv ();
     // get focal length from calibration matrix
-    params.f = params.K ( 0,0 );
+    params.f = K[0] ( 0,0 );
 
     for ( size_t i = 0; i < numCameras; i++ ) {
         params.cameras[i].K = scaleK(K[i],scaleFactor);
@@ -381,7 +378,7 @@ CameraParameters getCameraParameters ( CameraParameters_cu &cpc, InputFiles inpu
             */
         }
 
-        transformCamera ( R[i],t[i], transform,    params.cameras[i],params.K );
+        transformCamera ( R[i],t[i], transform,    params.cameras[i],params.cameras[i].K );
 
         params.cameras[i].P_inv = params.cameras[i].P.inv ( DECOMP_SVD );
         params.cameras[i].M_inv = params.cameras[i].P.colRange ( 0,3 ).inv ();
@@ -391,16 +388,16 @@ CameraParameters getCameraParameters ( CameraParameters_cu &cpc, InputFiles inpu
         params.cameras[i].baseline = 0.54f; //0.54 = Kitti baseline
 
         // K
-        Mat_<float> tmpK = params.K.t ();
+        Mat_<float> tmpK = params.cameras[i].K.t ();
         //copyOpencvMatToFloatArray ( params.K, &cpc.K);
         //copyOpencvMatToFloatArray ( params.K_inv, &cpc.K_inv);
         copyOpencvMatToFloatArray ( params.cameras[i].K, &cpc.cameras[i].K);
         copyOpencvMatToFloatArray ( params.cameras[i].K_inv, &cpc.cameras[i].K_inv);
-        cpc.cameras[i].fy = params.K(1,1);
-        cpc.f = params.K(0,0);
-        cpc.cameras[i].f = params.K(0,0);
-        cpc.cameras[i].fx = params.K(0,0);
-        cpc.cameras[i].fy = params.K(1,1);
+        cpc.cameras[i].fy = params.cameras[i].K(1,1);
+        cpc.f = params.cameras[i].K(0,0);
+        cpc.cameras[i].f = params.cameras[i].K(0,0);
+        cpc.cameras[i].fx = params.cameras[i].K(0,0);
+        cpc.cameras[i].fy = params.cameras[i].K(1,1);
         cpc.cameras[i].depthMin = params.cameras[i].depthMin;
         cpc.cameras[i].depthMax = params.cameras[i].depthMax;
         cpc.cameras[i].baseline = params.cameras[i].baseline;
@@ -414,7 +411,7 @@ CameraParameters getCameraParameters ( CameraParameters_cu &cpc, InputFiles inpu
         /*}*/
 
         /*params.cameras[i].alpha = params.K ( 0,0 )/params.K(1,1);*/
-        cpc.cameras[i].alpha = params.K ( 0,0 )/params.K(1,1);
+        cpc.cameras[i].alpha = params.cameras[i].K ( 0,0 )/params.cameras[i].K(1,1);
         // Copy data to cuda structure
         copyOpencvMatToFloatArray ( params.cameras[i].P,     &cpc.cameras[i].P);
         copyOpencvMatToFloatArray ( params.cameras[i].P_inv, &cpc.cameras[i].P_inv);
@@ -464,7 +461,7 @@ CameraParameters getCameraParameters ( CameraParameters_cu &cpc, InputFiles inpu
         /*cout << endl;*/
 
 
-        Mat_<float> tmpKinv = params.K_inv.t ();
+        Mat_<float> tmpKinv = params.cameras[i].K_inv.t ();
 
         /*cout << "Camera " << i << endl;*/
         /*cout << "P " << endl;*/

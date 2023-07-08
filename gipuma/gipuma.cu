@@ -866,9 +866,9 @@ void gipuma(GlobalState &gs) {
     printf("initial cost: %.8f \n", getAverageCost(gs));
     cudaEventRecord(start);
     printf("Iterations count %d \n", gs.params->iterations);
-    for (int it =0;it<gs.params->iterations; it++) {
-        // for (int it = 0; it < maxiter; it++) {
-        printf("iretation %d\n", it + 1);
+    for (int it = 0; it < gs.params->iterations; it++) {
+        printf("iteration %d\n", it + 1);
+
         // spatial propagation of 4 closest neighbors (1px up/down/left/right)
         gipuma_black_spatialPropClose_cu<T>
             <<<grid_size_initrand, block_size_initrand>>>(gs, it);
