@@ -8,13 +8,14 @@
 #include <cassert>
 #include <Eigen/Dense>
 #include <pcl/common/point_tests.h> // for pcl::isFinite
+#include <pcl/visualization/pcl_visualizer.h>
 
 using namespace std;
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
-#define DISTANCE_FUSION 2e-4
-#define KD_TREE_RADIUS 0.02
+#define DISTANCE_FUSION 2e-6
+#define KD_TREE_RADIUS 0.002
 #define CURVE_ANGLE (2 * (M_1_PI * M_1_PI) / 36.)
 #define STRAND_THICKNESS (2 * 1e-8)
 
@@ -22,20 +23,18 @@ void LineFusion::line_fusion(OrientedPointCloud &fused_line_cloud)
 {
     fused_line_cloud.second.reserve(m_original_points.second.size()); // Reserve areas for direction vector
     EigenLine q_prev, q_next;
-    double d;
+    float d;
     assertm(m_original_points.second.size() == m_original_points.first->size(), "Point and direction vector sizes should be equal.");
-    int threshold = 0;
     for (size_t i = 0; i < m_original_points.second.size(); i++)
     {
-        q_prev.first << (*(m_original_points.first))[i].x, (*(m_original_points.first))[i].y, (*(m_original_points.first))[i].z; // x-y-z points
-        q_prev.second = m_original_points.second.at(i);                                                                          // direction
-        d = DISTANCE_FUSION + 1;                                                                                                 // Just assigned a value bigger than distance fusion
-        threshold = 0;
+        q_prev.first = m_original_points.first->at(i).getArray3fMap().cast<float>(); // x-y-z points
+        q_prev.second = m_original_points.second.at(i);                              // direction
+        d = DISTANCE_FUSION + 1;                                                     // Just assigned a value bigger than distance fusion
+        int threshold = 0;
         while (d > DISTANCE_FUSION && threshold < 1000)
         {
             q_next = local_meanshift(q_prev, i);
-            d = (q_next.first - q_prev.first).squaredNorm();
-            // std::cout << d << " " << (d > DISTANCE_FUSION) << " " << DISTANCE_FUSION << std::endl;
+            d = (q_next.first - q_prev.first).norm();
             q_prev = q_next;
             threshold++;
         }
@@ -50,15 +49,15 @@ std::optional<LineFusion::EigenVector> LineFusion::line_plane_intersection(const
     // If the dot product between the line and the plane normal is zero,
     // then the plane and the line are parallel to each other which means there's no intersection.
 
-    if (abs(line.second.dot(plane_normal)) <= 2 * std::numeric_limits<double>::epsilon())
+    if (abs(line.second.dot(plane_normal)) <= 2 * std::numeric_limits<float>::epsilon())
     {
         return {};
     }
-    double numerator = (point_on_plane - line.first).dot(plane_normal);
-    double denominator = line.second.dot(plane_normal);
-    double d = numerator / denominator;
+    float numerator = (point_on_plane - line.first).dot(plane_normal.stableNormalized());
+    float denominator = line.second.stableNormalized().dot(plane_normal.stableNormalized());
+    float d = numerator / denominator;
 
-    return line.first + d * line.second;
+    return line.first + d * line.second.stableNormalized();
 }
 
 LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q, const int index)
@@ -71,33 +70,31 @@ LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q
 
     std::vector<int> point_idx_radius_search;
     std::vector<float> point_radius_squared_distance;
-    // std::cout << "SEARCH POINT: " << searchPoint << std::endl;
     if (pcl::isFinite(searchPoint) && kdtree.radiusSearch(searchPoint, KD_TREE_RADIUS, point_idx_radius_search, point_radius_squared_distance) > 1)
     {
-        LineFusion::EigenVector init_position{(*(m_original_points.first))[index].x, (*(m_original_points.first))[index].y, (*(m_original_points.first))[index].z};
+        LineFusion::EigenVector init_position{m_original_points.first->at(index).getArray3fMap()};
         LineFusion::EigenVector init_direction{m_original_points.second[index]};
         LineFusion::EigenVector position, direction;
         std::vector<LineFusion::EigenVector> positions_all, directions_all;
         LineFusion::EigenLine line;
-        double weight = 0;
-        std::vector<double> weights_all;
+        float weight = 0;
+        std::vector<float> weights_all;
         std::optional<LineFusion::EigenVector> new_position;
-        double total_weights = 0;
-        // std::cout << "KDTREE RADIUS SEARCH SIZE: " << point_idx_radius_search.size() << std::endl;
-        for (size_t i = 0; i < point_idx_radius_search.size(); i++)
+        float total_weights = 0;
+        for (auto &&neighbor : point_idx_radius_search)
         {
-            auto &&neighbor = point_idx_radius_search.at(i);
-            if (static_cast<int>(neighbor) == index)
-                continue;
-            position << (*(m_original_points.first))[neighbor].x, (*(m_original_points.first))[neighbor].y, (*(m_original_points.first))[neighbor].z;
+            position = m_original_points.first->at(neighbor).getArray3fMap();
             direction << m_original_points.second[neighbor];
             line.first << position;
             line.second << direction;
             new_position = line_plane_intersection(init_position, init_direction, line);
             if (new_position.has_value())
-            { 
-                double first_part = (new_position.value() - init_position).squaredNorm() / STRAND_THICKNESS; 
-                double second_part = pow(acos(init_direction.dot(direction)), 2) / CURVE_ANGLE;
+            {
+                float squared_diff = (new_position.value() - init_position).squaredNorm();
+                float first_part = squared_diff / STRAND_THICKNESS;
+
+                float dir_diff = init_direction.stableNormalized().dot(direction.stableNormalized());
+                float second_part = pow(acos(dir_diff), 2) / CURVE_ANGLE;
                 weight = exp(-(first_part + second_part));
                 positions_all.push_back(new_position.value());
                 directions_all.push_back(direction);
@@ -105,22 +102,24 @@ LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q
                 total_weights += weight;
             }
         }
-        LineFusion::EigenLine mean_line;
-        if (total_weights != 0)
+
+        LineFusion::EigenLine mean_line{{0, 0, 0}, {0, 0, 0}};
+        if (total_weights > 2 * std::numeric_limits<float>::epsilon())
         {
             for (size_t i = 0; i < positions_all.size(); i++)
             {
-                mean_line.first += weights_all.at(i) * positions_all.at(i);
-                mean_line.second += weights_all.at(i) * directions_all.at(i);
+                // mean_line.first += weights_all.at(i) * positions_all.at(i);
+                // mean_line.second += weights_all.at(i) * directions_all.at(i);
+                mean_line.first += positions_all.at(i);
+                mean_line.second += directions_all.at(i);
             }
-            mean_line.first /= total_weights;
-            mean_line.second /= total_weights;
+            mean_line.first /= positions_all.size();
+            mean_line.second /= positions_all.size();
         }
         else
         {
             mean_line = q;
         }
-
         return mean_line;
     }
     return q;
