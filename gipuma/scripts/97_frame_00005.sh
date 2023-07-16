@@ -5,6 +5,7 @@ inputdir="data/97_frame_00005/"
 orientaionMapsDir="data/97_frame_00005/our_dataset_last"
 confidenceValuesDir="data/97_frame_00005/our_dataset_last"
 masksDir="data/97_frame_00005/masks"
+depthDir="data/97_frame_00005/depth"
 batch_name="97_frame_00005"
 output_dir_basename="results/$batch_name"
 p_folder="data/97_frame_00005/cam_par.txt"
@@ -68,7 +69,8 @@ do
         -rk=$rk
         -orientation_maps_folder $orientaionMapsDir
         -confidence_values_folder $confidenceValuesDir
-        -masks_folder $masksDir"
+        -masks_folder $masksDir
+        -depth_folder $depthDir"
     echo $cmd
     $cmd
 

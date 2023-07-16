@@ -552,8 +552,9 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
     float mind = gs.params->depthMin;
     float maxd = gs.params->depthMax;
 
-    gs.lines->depth[center] = curand_between(&localState, mind, maxd);
-    // gs.lines->depth[center] = 1.0675795;
+    if (gs.lines->depth[center] < 0.01f){
+        gs.lines->depth[center] = curand_between(&localState, mind, maxd);
+    }
 
     gs.lines->lineCost[center] = pmCostMultiview_cu<T>(
         gs, p, gs.lines->depth[center], gs.lines->unitDirection[center]);

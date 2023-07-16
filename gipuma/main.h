@@ -55,6 +55,7 @@ struct InputFiles {
     string orientation_maps_folder; // path to orientations images
     string confidence_values_folder; // path to confidence values images
     string masks_folder; // path to masks images
+    string depth_folder; // path to inital depth value
 };
 
 //pathes to output files

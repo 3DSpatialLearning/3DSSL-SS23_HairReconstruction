@@ -526,3 +526,13 @@ cv::Mat importFloatImage(const std::string &filePath) {
         return cv::Mat();
     }
 }
+
+
+static void readDepth(string filePath, int count,float *data) {
+    cout << "reading depth " << filePath << endl;
+    std::ifstream file(filePath, std::ios::binary);
+
+    file.read(reinterpret_cast<char*>(&data[0]), count*sizeof(float));
+
+    file.close();
+}

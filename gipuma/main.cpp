@@ -221,6 +221,7 @@ static int getParametersFromCommandLine(int argc, char** argv,
     const char* orientation_maps_folder_opt = "-orientation_maps_folder";
     const char* confidence_values_folder_opt = "-confidence_values_folder";
     const char* masks_folder_opt = "-masks_folder";
+    const char* depth_folder_opt = "-depth_folder";
 
     // read in arguments
     for (int i = 1; i < argc; i++) {
@@ -415,6 +416,9 @@ static int getParametersFromCommandLine(int argc, char** argv,
         }  else if (strncmp(argv[i], masks_folder_opt,
                            strlen(masks_folder_opt)) == 0) {
             inputFiles.masks_folder = argv[++i];
+        }  else if (strncmp(argv[i], depth_folder_opt,
+                           strlen(depth_folder_opt)) == 0) {
+            inputFiles.depth_folder = argv[++i];
         } else {
             printf("Command-line parameter warning: unknown option %s\n",
                    argv[i]);
@@ -851,28 +855,7 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     int height = rows;
 
     cout << "Using width and height: " << width << " " << height << endl;
-    // Create a 3D line map with random depth values and unit vectors
-    vector<vector<Line>> lineMap(width);
-    // not so random Initialization
-    for (int widthIdx = 0; widthIdx < width; ++widthIdx) {
-        lineMap[widthIdx] = vector<Line>(height);
-        for (int heightIdx = 0; heightIdx < height; ++heightIdx) {
-            // line matching hair strand direction for reference image:
-            // cam_222200045
-            lineMap[widthIdx][heightIdx].depth = 1.0675795;
-
-            lineMap[widthIdx][heightIdx].unitDirection << -0.12800153,
-                -0.68858582, 0.7137683;
-            normalize(lineMap[widthIdx][heightIdx].unitDirection,
-                      lineMap[widthIdx][heightIdx].unitDirection);
-        }
-    }
-
-    int u = 196;
-    int v = 1225;
-    cout << "Using pixel coord: " << u << " " << v << endl;
-    cout << "Using reference image: " << inputFiles.img_filenames[0] << endl;
-
+    
     // allocation for disparity and normal stores
     vector<Mat_<float>> disp(algParams.num_img_processed);
     vector<Mat_<uchar>> validCost(algParams.num_img_processed);
@@ -984,6 +967,13 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
         gs->lines->s = cols;
         gs->lines->l = cols;
     }
+
+    // read depth
+    if (inputFiles.depth_folder.size() > 0) {
+        string depthPath = inputFiles.depth_folder + "/" + inputFiles.img_filenames_base[REFERENCE] + ".dat";
+        readDepth(depthPath, cols * rows, gs->lines->depth);
+    }
+
 
     vector<Mat> img_grayscale_float(numImages);
     vector<Mat> img_color_float(numImages);
