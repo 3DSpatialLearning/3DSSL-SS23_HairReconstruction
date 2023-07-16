@@ -2,10 +2,10 @@
 prog="./gipuma"
 warping="../fusibile/fusibile"
 inputdir="data/multiface2/"
-orientaionMapsDir="data/multiface2/orient"
-confidenceValuesDir="data/multiface2/conf"
+orientaionMapsDir="data/multiface2/multiface_last"
+confidenceValuesDir="data/multiface2/multiface_last"
 masksDir="data/multiface2/mask"
-batch_name="multiface2_with_conf_1_test_read_conf"
+batch_name="multiface2"
 output_dir_basename="results/$batch_name"
 p_folder="data/multiface2/cam_param.txt"
 scale=1

@@ -2,8 +2,9 @@
 prog="./gipuma"
 warping="../fusibile/fusibile"
 inputdir="data/97_frame_00005/"
-orientaionMapsDir="data/97_frame_00005/orient"
-confidenceValuesDir="data/97_frame_00005/conf"
+orientaionMapsDir="data/97_frame_00005/our_dataset_last"
+confidenceValuesDir="data/97_frame_00005/our_dataset_last"
+masksDir="data/97_frame_00005/masks"
 batch_name="97_frame_00005"
 output_dir_basename="results/$batch_name"
 p_folder="data/97_frame_00005/cam_par.txt"
@@ -21,7 +22,7 @@ output_dir=${output_dir_basename}/
 # fuse options
 disp_thresh=0.001
 normal_thresh=10
-num_consistent=2
+num_consistent=1
 min_angle=30
 max_angle=90
 
@@ -66,7 +67,8 @@ do
         -k=$k
         -rk=$rk
         -orientation_maps_folder $orientaionMapsDir
-        -confidence_values_folder $confidenceValuesDir"
+        -confidence_values_folder $confidenceValuesDir
+        -masks_folder $masksDir"
     echo $cmd
     $cmd
 

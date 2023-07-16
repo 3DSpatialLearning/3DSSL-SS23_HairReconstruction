@@ -225,7 +225,9 @@ static int getParametersFromCommandLine(int argc, char** argv,
     // read in arguments
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] != '-') {
-            inputFiles.img_filenames.push_back(argv[i]);
+            string imagename = argv[i];
+            inputFiles.img_filenames.push_back(imagename);
+            inputFiles.img_filenames_base.push_back(imagename.substr(0, imagename.find(".")));
         } else if (strncmp(argv[i], algorithm_opt, strlen(algorithm_opt)) ==
                    0) {
             char* _alg = argv[i] + strlen(algorithm_opt);
@@ -769,11 +771,11 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     for (size_t i = 0; i < numImages; i++) {
         cout << "reading file: "
              << inputFiles.orientation_maps_folder + "/" +
-                    inputFiles.img_filenames[i]
+                    inputFiles.img_filenames_base[i] + "_finalOrient.flo"
              << endl;
 
         orientationMaps[i] = importFloatImage(
-            inputFiles.orientation_maps_folder + "/" + inputFiles.img_filenames[i] + ".flo"
+            inputFiles.orientation_maps_folder + "/" + inputFiles.img_filenames_base[i] + "_finalOrient.flo"
         );
 
 
@@ -790,11 +792,11 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     for (size_t i = 0; i < numImages; i++) {
         cout << "reading file: "
              << inputFiles.confidence_values_folder + "/" +
-                    inputFiles.img_filenames[i]
+                    inputFiles.img_filenames_base[i] + "_finalVariance.flo"
              << endl;
         confidenceValues[i] = importFloatImage(
             inputFiles.confidence_values_folder + "/" +
-            inputFiles.img_filenames[i] + ".flo"
+            inputFiles.img_filenames_base[i] + "_finalVariance.flo"
         );
 
         confidenceValues[i].convertTo(confidenceValuesFloat[i],  CV_32FC1);
@@ -930,8 +932,9 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     myfile << "Selected views: ";
     cout << "Selected views: ";
     for (int i = 0; i < numSelViews; i++) {
-        myfile << cameraParams.viewSelectionSubset[i] << ", ";
-        cout << cameraParams.viewSelectionSubset[i] << ", ";
+        myfile << cameraParams.viewSelectionSubset[i] << " " << inputFiles.img_filenames[cameraParams.viewSelectionSubset[i]] << ", ";
+        cout << cameraParams.viewSelectionSubset[i] << " " << inputFiles.img_filenames[cameraParams.viewSelectionSubset[i]] << ", ";
+
         gs->cameras->viewSelectionSubset[i] =
             cameraParams.viewSelectionSubset[i];
     }

@@ -39,6 +39,7 @@ struct GTcheckParameters {
 struct InputFiles {
     InputFiles () : gt_filename ( "" ), gt_nocc_filename ( "" ), occ_filename ( "" ), gt_normal_filename ( "" ), calib_filename ( "" ), images_folder ( "" ), p_folder ( "" ), camera_folder ( "" ),krt_file(""), pmvs_folder("") {}
     vector<string> img_filenames; // input camera images (only filenames, path is set in images_folder), names can also be used for calibration data (e.g. for Strecha P, camera)
+    vector<string> img_filenames_base;
     string gt_filename; // ground truth image
     string gt_nocc_filename; // non-occluded ground truth image (as provided e.g. by Kitti)
     string occ_filename; // occlusion mask (binary map of all the points that are occluded) (as provided e.g. by Middleburry)
