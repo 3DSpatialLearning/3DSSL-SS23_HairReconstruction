@@ -37,6 +37,9 @@ public:
     cudaTextureObject_t confidenceValue[MAX_IMAGES];
     cudaArray *cuArrayConf[MAX_IMAGES];
 
+    cudaTextureObject_t imgsMask[MAX_IMAGES];
+    cudaArray *cuArrayImgsMask[MAX_IMAGES];
+
     //cudaTextureObject_t gradx [MAX_IMAGES];
     //cudaTextureObject_t grady [MAX_IMAGES];
     GlobalState() {

@@ -820,7 +820,20 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
             return -1;
         }
     }
-    
+
+
+    vector<Mat_<uint8_t>> img_mask_grayscale(numImages);
+    for (size_t i = 0; i < numImages; i++) {
+        img_mask_grayscale[i] =
+            imread((inputFiles.masks_folder + "/" + inputFiles.img_filenames[i]),
+                   IMREAD_GRAYSCALE);
+        
+        if (img_mask_grayscale[i].rows == 0) {
+            printf("Image seems to be invalid\n");
+            return -1;
+        }
+
+    }
 
     uint32_t rows = img_grayscale[0].rows;
     uint32_t cols = img_grayscale[0].cols;
@@ -986,11 +999,14 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     vector<Mat> img_color_float(numImages);
     vector<Mat> img_color_float_alpha(numImages);
     vector<Mat_<uint16_t>> img_grayscale_uint(numImages);
+    vector<Mat> img_mask_grayscale_float(numImages);
     for (size_t i = 0; i < numImages; i++) {
         img_grayscale[i].convertTo(img_grayscale_float[i],
                                    CV_32FC1);  // or CV_32F works (too)
-        img_grayscale[i].convertTo(img_grayscale_uint[i],
-                                   CV_16UC1);  // or CV_32F works (too)
+        img_grayscale[i].convertTo(img_grayscale_float[i],
+                                   CV_32FC1);  // or CV_32F works (too)
+        img_mask_grayscale[i].convertTo(img_mask_grayscale_float[i],
+                                   CV_32FC1);  // or CV_32F works (too)
         if (algParams.color_processing) {
             vector<Mat_<float>> rgbChannels(3);
             img_color_float_alpha[i] = Mat::zeros(
@@ -1021,6 +1037,7 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
     else
         addImageToTextureFloatGray(img_grayscale_float, gs->imgs, gs->cuArray);
 
+    addImageToTextureFloatGray(img_mask_grayscale_float, gs->imgsMask, gs->cuArrayImgsMask);
     addImageToTextureFloatGray(orientationMapsFloat, gs->orientaionMap, gs->cuArrayOrient);
     addImageToTextureFloatGray(confidenceValuesFloat, gs->confidenceValue, gs->cuArrayConf);
 

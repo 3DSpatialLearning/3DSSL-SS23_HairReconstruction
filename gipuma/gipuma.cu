@@ -331,7 +331,8 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
     const int cols = gs.cameras->cols;
 
     const cudaTextureObject_t imgOrient = gs.orientaionMap[cameraIdx];
-    const cudaTextureObject_t imgConf = gs.confidenceValue[cameraIdx];
+    // const cudaTextureObject_t imgConf = gs.confidenceValue[cameraIdx];
+    const cudaTextureObject_t imgConf = gs.imgsMask[cameraIdx];
 
     float geometricCost = 0.f;
     float confidenceValuesSum = 0.f;
@@ -354,7 +355,8 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
 
         validSamplesCount++;
         const float orientaion = texat(imgOrient, sampleInOtherView.x, sampleInOtherView.y);
-        const float confidence = texat(imgConf, sampleInOtherView.x, sampleInOtherView.y);
+        // const float confidence = texat(imgConf, sampleInOtherView.x, sampleInOtherView.y);
+        const float confidence = texat(imgConf, sampleInOtherView.x, sampleInOtherView.y) / 255.f;
         // const float confidence = 1.f;
 
         confidenceValuesSum += confidence;
