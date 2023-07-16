@@ -156,7 +156,10 @@ __global__ void fusibile (GlobalState &gs, int ref_camera)
     float4 direction = tex2D<float4>(gs.directions[ref_camera], p.x+0.5f, p.y+0.5f);
     float depth = tex2D<float> (gs.depths[ref_camera], p.x+0.5f, p.y+0.5f);
 
-
+    if (depth == 0.f){
+        return;
+    }
+    
     float4 X;
     get3Dpoint_cu (&X, camParams.cameras[ref_camera], p, depth);
 

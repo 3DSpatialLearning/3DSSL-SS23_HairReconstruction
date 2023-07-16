@@ -79,10 +79,21 @@ static string getColorString(Vec3i color) {
 
 template <typename ImgType>
 static void storeLineMapPlyFileBinary(char *plyFilePath,
-                                    char *plyFileLineMapDirections,
+                                      char *plyFileLineMapDirections,
+                                      char *plyFileLineMapDirectionsMask,
                                       const Mat_<float> &depthImg,
                                       const Mat_<Vec3f> &directionsImg,
+                                      const Mat_<float> &maskImg,
                                       const Mat_<ImgType> img, Camera cam) {
+    int positiveMaskValuesCount = 0;
+    for (int x = 0; x < maskImg.cols; x++) {
+        for (int y = 0; y < maskImg.rows; y++) {
+            if (maskImg(y, x) > 0.f) {
+                positiveMaskValuesCount++;
+            }
+        }
+    }
+
     cout << "Saving line map in " << plyFilePath << endl;
     int samplesAlongDirection = 4;
     FILE *outputPly;
@@ -112,7 +123,7 @@ static void storeLineMapPlyFileBinary(char *plyFilePath,
     for (int x = 0; x < cols; x++) {
         for (int y = 0; y < rows; y++) {
             Vec3f direction = directionsImg(y, x);
-            ImgType color = img(y, x);
+            Vec3b color = img(y, x);
 
             Vec3f ptX = get3Dpoint(cam, x, y, depthImg(y, x));
 
@@ -126,9 +137,9 @@ static void storeLineMapPlyFileBinary(char *plyFilePath,
 #pragma omp critical
             {
                 fwrite(&(ptX(0)), sizeof(float), 3, outputPly);
-                fwrite(&color, sizeof(color), 1, outputPly);
-                fwrite(&color, sizeof(color), 1, outputPly);
-                fwrite(&color, sizeof(color), 1, outputPly);
+                fwrite(&(color(2)), sizeof(color(2)), 1, outputPly);
+                fwrite(&(color(1)), sizeof(color(1)), 1, outputPly);
+                fwrite(&(color(0)), sizeof(color(0)), 1, outputPly);
             }
         }
     }
@@ -167,21 +178,68 @@ static void storeLineMapPlyFileBinary(char *plyFilePath,
                 ptX(1) = 0.0f;
                 ptX(2) = 0.0f;
             }
-            
-            for(int sampleIdx = 1; sampleIdx <= samplesAlongDirection; sampleIdx++) {
-                Vec3f ptX2 = ptX + std::pow(-1, sampleIdx) * (0.00001f) * sampleIdx  * direction;
+
+            for (int sampleIdx = 1; sampleIdx <= samplesAlongDirection; sampleIdx++) {
+                Vec3f ptX2 = ptX + std::pow(-1, sampleIdx) * (0.00001f) * sampleIdx * direction;
 #pragma omp critical
-            {
-                fwrite(&(ptX2(0)), sizeof(float), 3, outputDirectionsPly);
-                fwrite(&redC, sizeof(redC), 1, outputDirectionsPly);
-                fwrite(&greenC, sizeof(greenC), 1, outputDirectionsPly);
-                fwrite(&blueC, sizeof(blueC), 1, outputDirectionsPly);
-            }
+                {
+                    fwrite(&(ptX2(0)), sizeof(float), 3, outputDirectionsPly);
+                    fwrite(&redC, sizeof(redC), 1, outputDirectionsPly);
+                    fwrite(&greenC, sizeof(greenC), 1, outputDirectionsPly);
+                    fwrite(&blueC, sizeof(blueC), 1, outputDirectionsPly);
+                }
             }
         }
     }
 
     fclose(outputDirectionsPly);
+
+    FILE *outputPlyConf;
+    outputPlyConf = fopen(plyFileLineMapDirectionsMask, "wb");
+
+    // write header
+    fprintf(outputPlyConf, "ply\n");
+    fprintf(outputPlyConf, "format binary_little_endian 1.0\n");
+    fprintf(outputPlyConf, "element vertex %d\n", positiveMaskValuesCount);
+    fprintf(outputPlyConf, "property float x\n");
+    fprintf(outputPlyConf, "property float y\n");
+    fprintf(outputPlyConf, "property float z\n");
+    fprintf(outputPlyConf, "property uchar red\n");
+    fprintf(outputPlyConf, "property uchar green\n");
+    fprintf(outputPlyConf, "property uchar blue\n");
+    fprintf(outputPlyConf, "end_header\n");
+
+// write data
+#pragma omp parallel for
+    for (int x = 0; x < maskImg.cols; x++) {
+        for (int y = 0; y < maskImg.rows; y++) {
+            if (maskImg(y, x) <= 0.f) {
+                continue;
+            }
+
+            Vec3f direction = directionsImg(y, x);
+            Vec3b color = img(y, x);
+
+            Vec3f ptX = get3Dpoint(cam, x, y, depthImg(y, x));
+
+            if (!(ptX(0) < FLT_MAX && ptX(0) > -FLT_MAX) ||
+                !(ptX(1) < FLT_MAX && ptX(1) > -FLT_MAX) ||
+                !(ptX(2) < FLT_MAX && ptX(2) >= -FLT_MAX)) {
+                ptX(0) = 0.0f;
+                ptX(1) = 0.0f;
+                ptX(2) = 0.0f;
+            }
+#pragma omp critical
+            {
+                fwrite(&(ptX(0)), sizeof(float), 3, outputPlyConf);
+                fwrite(&(color(2)), sizeof(color(2)), 1, outputPlyConf);
+                fwrite(&(color(1)), sizeof(color(1)), 1, outputPlyConf);
+                fwrite(&(color(0)), sizeof(color(0)), 1, outputPlyConf);
+            }
+        }
+    }
+
+    fclose(outputPlyConf);
 }
 
 template <typename ImgType>

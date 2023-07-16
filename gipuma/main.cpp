@@ -220,6 +220,7 @@ static int getParametersFromCommandLine(int argc, char** argv,
     const char* rk_opt = "-rk=";
     const char* orientation_maps_folder_opt = "-orientation_maps_folder";
     const char* confidence_values_folder_opt = "-confidence_values_folder";
+    const char* masks_folder_opt = "-masks_folder";
 
     // read in arguments
     for (int i = 1; i < argc; i++) {
@@ -409,6 +410,9 @@ static int getParametersFromCommandLine(int argc, char** argv,
         } else if (strncmp(argv[i], confidence_values_folder_opt,
                            strlen(confidence_values_folder_opt)) == 0) {
             inputFiles.confidence_values_folder = argv[++i];
+        }  else if (strncmp(argv[i], masks_folder_opt,
+                           strlen(masks_folder_opt)) == 0) {
+            inputFiles.masks_folder = argv[++i];
         } else {
             printf("Command-line parameter warning: unknown option %s\n",
                    argv[i]);
@@ -749,11 +753,10 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
         img_grayscale[i] =
             imread((inputFiles.images_folder + inputFiles.img_filenames[i]),
                    IMREAD_GRAYSCALE);
-        if (algParams.color_processing) {
-            img_color[i] =
-                imread((inputFiles.images_folder + inputFiles.img_filenames[i]),
-                       IMREAD_COLOR);
-        }
+
+        img_color[i] =
+            imread((inputFiles.images_folder + inputFiles.img_filenames[i]),
+                    IMREAD_COLOR);
 
         if (img_grayscale[i].rows == 0) {
             printf("Image seems to be invalid\n");
@@ -801,6 +804,23 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
             return -1;
         }
     }
+
+    Mat_<float> maskRefImg;
+    if (inputFiles.masks_folder.size() > 0) {
+        cout << "reading file: "
+                << inputFiles.masks_folder + "/" +
+                    inputFiles.img_filenames[REFERENCE]
+                << endl;
+
+        maskRefImg = imread((inputFiles.masks_folder + "/" + inputFiles.img_filenames[REFERENCE]),
+                IMREAD_GRAYSCALE);
+
+        if (maskRefImg.rows == 0) {
+            printf("Mask image seems to be invalid\n");
+            return -1;
+        }
+    }
+    
 
     uint32_t rows = img_grayscale[0].rows;
     uint32_t cols = img_grayscale[0].cols;
@@ -1016,6 +1036,8 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
         Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1);
     Mat_<float> lineDepth =
         Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1);
+    Mat_<float> lineDepthMask =
+        Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC1);
     Mat_<Vec3f> lineDirection =
         Mat::zeros(img_grayscale[0].rows, img_grayscale[0].cols, CV_32FC3);
     float c = 0.f;
@@ -1031,6 +1053,16 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
             lineDirection(j, i) = Vec3f(direction.x, direction.y, direction.z);
             c += lineCost(j, i);
         }
+    
+    if (inputFiles.masks_folder.size() > 0) {
+        for (int i = 0; i < img_grayscale[0].cols; i++) {
+            for (int j = 0; j < img_grayscale[0].rows; j++) {
+                if(maskRefImg(j, i) > 0) {
+                    lineDepthMask(j, i) = lineDepth(j, i);
+                }
+            }
+        }
+    }
 
     Mat_<Vec3f> norm0disp = norm0.clone();
     Mat planes_display, planescalib_display, planescalib_display2;
@@ -1066,7 +1098,12 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
 
     // store depth
     sprintf(outputPath, "%s/depth.dmb", outputFolder);
-    writeDmb(outputPath, lineDepth);
+    if (inputFiles.masks_folder.size() > 0) {
+        writeDmb(outputPath, lineDepthMask);
+    } else {
+        writeDmb(outputPath, lineDepth);
+    }
+
 
     // store directions
     sprintf(outputPath, "%s/directions.dmb", outputFolder);
@@ -1100,8 +1137,19 @@ static int runGipuma(InputFiles& inputFiles, OutputFiles& outputFiles,
         char plyFileLineMapDirections[256];
         sprintf(plyFileLineMapDirections, "%s/3d_model_line_map_direction%zu.ply", outputFolder, i);
     
-        storeLineMapPlyFileBinary(plyFileLineMap, plyFileLineMapDirections, lineDepth, lineDirection, img_grayscale[i],
-                           camParamsNotTransformed.cameras[i]);
+        char plyFileLineMapDirectionsMask[256];
+        sprintf(plyFileLineMapDirectionsMask, "%s/3d_model_line_map_direction_mask%zu.ply", outputFolder, i);
+    
+        storeLineMapPlyFileBinary(
+            plyFileLineMap,
+            plyFileLineMapDirections,
+            plyFileLineMapDirectionsMask,
+            lineDepth,
+            lineDirection,
+            maskRefImg,
+            img_color[i],
+            camParamsNotTransformed.cameras[i]
+        );
 
         Mat dist_display, dist_display_col;
         getDisparityForDisplay(distImg, dist_display, dist_display_col,

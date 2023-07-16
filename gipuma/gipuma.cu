@@ -193,7 +193,7 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
                                                    const int2 pixelCoord,
                                                    const float depth,
                                                    const float3 unitDirection,
-                                                   float2 samples[400]) {
+                                                   float2 samples[800]) {
     const int k = gs.params->k;
     const int rk = gs.params->rk;
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
@@ -286,7 +286,7 @@ __device__ FORCEINLINE_GIPUMA static float angularDiff_cu(
 
 template <typename T>
 __device__ FORCEINLINE_GIPUMA static int validNeighborsCount_cu(
-    const GlobalState &gs, const float2 samples[400]) {
+    const GlobalState &gs, const float2 samples[800]) {
     const int k = gs.params->k;
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
     int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
@@ -324,7 +324,7 @@ __device__ FORCEINLINE_GIPUMA static int validNeighborsCount_cu(
 
 template <typename T>
 __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
-    const GlobalState &gs, const float2 samples[400], const int cameraIdx) {
+    const GlobalState &gs, const float2 samples[800], const int cameraIdx) {
     const int k = gs.params->k;
 
     const int rows = gs.cameras->rows;
@@ -355,6 +355,7 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
         validSamplesCount++;
         const float orientaion = texat(imgOrient, sampleInOtherView.x, sampleInOtherView.y);
         const float confidence = texat(imgConf, sampleInOtherView.x, sampleInOtherView.y);
+        // const float confidence = 1.f;
 
         confidenceValuesSum += confidence;
 
@@ -372,7 +373,7 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
 
 template <typename T>
 __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
-    const GlobalState &gs, const float2 samples[400], const int cameraIdx) {
+    const GlobalState &gs, const float2 samples[800], const int cameraIdx) {
     const int k = gs.params->k;
     float intensityCost = 0.f;
 
@@ -488,7 +489,7 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
     int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
 
-    float2 samples[400];
+    float2 samples[800];
     samplePoints_cu<T>(gs, pixelCoord, depth, unitDirection, samples);
 
     const int validNeighborsCount = validNeighborsCount_cu<T>(gs, samples);

@@ -53,6 +53,7 @@ struct InputFiles {
     string pmvs_folder; // path to pmvs folder
     string orientation_maps_folder; // path to orientations images
     string confidence_values_folder; // path to confidence values images
+    string masks_folder; // path to masks images
 };
 
 //pathes to output files
