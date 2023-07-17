@@ -22,8 +22,8 @@ void read_point_cloud_binary_with_directions(std::string &file_path, std::pair<p
 
     std::vector<float> data(6 * points_count);
     file.read(reinterpret_cast<char *>(&data[0]), 6 * points_count * sizeof(float));
-    oriented_pointcloud.first->resize(points_count);
-    oriented_pointcloud.second.resize(points_count);
+    oriented_pointcloud.first->reserve(points_count);
+    oriented_pointcloud.second.reserve(points_count);
     for (size_t i = 0; i < data.size(); i += 6)
     {
         std::cout << i + 5 << " " << data.size() << " " << points_count << std::endl;
