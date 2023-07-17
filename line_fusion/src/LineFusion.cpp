@@ -25,6 +25,12 @@ void LineFusion::line_fusion(OrientedPointCloud &fused_line_cloud)
     EigenLine q_prev, q_next;
     float d;
     assertm(m_original_points.second.size() == m_original_points.first->size(), "Point and direction vector sizes should be equal.");
+    
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+
+    kdtree.setInputCloud(m_original_points.first);
+
+// #pragma omp parallel for
     for (size_t i = 0; i < m_original_points.second.size(); i++)
     {
         q_prev.first = m_original_points.first->at(i).getArray3fMap().cast<float>(); // x-y-z points
@@ -33,14 +39,17 @@ void LineFusion::line_fusion(OrientedPointCloud &fused_line_cloud)
         int threshold = 0;
         while (d > DISTANCE_FUSION && threshold < 1000)
         {
-            q_next = local_meanshift(q_prev, i);
+            q_next = local_meanshift(q_prev, i, kdtree);
             d = (q_next.first - q_prev.first).norm();
             q_prev = q_next;
             threshold++;
         }
-        fused_line_cloud.first->emplace_back(q_next.first[0], q_next.first[1], q_next.first[2]);
-        fused_line_cloud.second.push_back(q_next.second);
-        std::cout << i << std::endl;
+// #pragma omp critical
+    {
+            fused_line_cloud.first->emplace_back(q_next.first[0], q_next.first[1], q_next.first[2]);
+            fused_line_cloud.second.push_back(q_next.second);
+            std::cout << i << std::endl;
+    }
     }
 }
 
@@ -60,11 +69,8 @@ std::optional<LineFusion::EigenVector> LineFusion::line_plane_intersection(const
     return line.first + d * line.second.stableNormalized();
 }
 
-LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q, const int index)
+LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q, const int index, const pcl::KdTreeFLANN<pcl::PointXYZ> &kdtree)
 {
-    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-
-    kdtree.setInputCloud(m_original_points.first);
 
     pcl::PointXYZ searchPoint{static_cast<float>(q.first[0]), static_cast<float>(q.first[1]), static_cast<float>(q.first[2])};
 
@@ -75,12 +81,12 @@ LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q
         LineFusion::EigenVector init_position{m_original_points.first->at(index).getArray3fMap()};
         LineFusion::EigenVector init_direction{m_original_points.second[index]};
         LineFusion::EigenVector position, direction;
-        std::vector<LineFusion::EigenVector> positions_all, directions_all;
+        LineFusion::EigenVector positions_all, directions_all;
         LineFusion::EigenLine line;
         float weight = 0;
-        std::vector<float> weights_all;
         std::optional<LineFusion::EigenVector> new_position;
         float total_weights = 0;
+#pragma omp parallel for
         for (auto &&neighbor : point_idx_radius_search)
         {
             position = m_original_points.first->at(neighbor).getArray3fMap();
@@ -96,9 +102,8 @@ LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q
                 float dir_diff = init_direction.stableNormalized().dot(direction.stableNormalized());
                 float second_part = pow(acos(dir_diff), 2) / CURVE_ANGLE;
                 weight = exp(-(first_part + second_part));
-                positions_all.push_back(new_position.value());
-                directions_all.push_back(direction);
-                weights_all.push_back(weight);
+                positions_all += weight * new_position.value();
+                directions_all += weight * direction;
                 total_weights += weight;
             }
         }
@@ -106,15 +111,8 @@ LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q
         LineFusion::EigenLine mean_line{{0, 0, 0}, {0, 0, 0}};
         if (total_weights > 2 * std::numeric_limits<float>::epsilon())
         {
-            for (size_t i = 0; i < positions_all.size(); i++)
-            {
-                // mean_line.first += weights_all.at(i) * positions_all.at(i);
-                // mean_line.second += weights_all.at(i) * directions_all.at(i);
-                mean_line.first += positions_all.at(i);
-                mean_line.second += directions_all.at(i);
-            }
-            mean_line.first /= positions_all.size();
-            mean_line.second /= positions_all.size();
+            mean_line.first = positions_all / total_weights;
+            mean_line.second = directions_all / total_weights;
         }
         else
         {

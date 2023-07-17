@@ -7,12 +7,19 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 
 
+find_package(OpenMP)
+if (OPENMP_FOUND)
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif()
+
+
 set(SOURCE_FILE src/main.cpp)
 find_package(PCL REQUIRED)
 find_package (Eigen3 REQUIRED NO_MODULE)
 include_directories(
     lib
     SYSTEM
+    OpenMP::OpenMP_CXX
     ${PCL_INCLUDE_DIRS}
 )
 
