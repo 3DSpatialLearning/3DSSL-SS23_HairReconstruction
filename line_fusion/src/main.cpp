@@ -96,25 +96,26 @@ std::pair<pcl::PointCloud<pcl::PointXYZ>::Ptr, std::vector<Eigen::Vector3f>> cre
 
         directions.emplace_back(a, b, c);
         cloud->push_back(pcl::PointXYZ(x, y, z)); // Add point to the point cloud
-        // if (angle == M_PI)
-        // else
-        //     directions.emplace_back(std::cos(angle), std::sin(angle), 0.0); // Convert angle to direction vector
+        if (angle == M_PI)
+            directions.emplace_back(1.0, 0.0, 0.0);
+        else
+            directions.emplace_back(std::cos(angle), std::sin(angle), 0.0); // Convert angle to direction vector
     }
 
     // Generate points for the second line
-    // for (int i = 0; i < num_points; ++i)
-    // {
-    //     float x = -1.0 + (2.0 / num_points) * i; // X values range from -1 to 1
-    //     float y = -1.0 - noise_dist(gen);        // Y values are constant for the second line
-    //     float z = noise_dist(gen);
-    //     float angle = angle_dist(gen); // Random angle 1 in radians (0 to π)
+    for (int i = 0; i < num_points; ++i)
+    {
+        float x = -1.0 + (2.0 / num_points) * i; // X values range from -1 to 1
+        float y = -1.0 - noise_dist(gen);        // Y values are constant for the second line
+        float z = noise_dist(gen);
+        float angle = angle_dist(gen); // Random angle 1 in radians (0 to π)
 
-    //     cloud->push_back(pcl::PointXYZ(x, y, z)); // Add point to the point cloud
-    //     if (angle == M_PI)
-    //         directions.emplace_back(1.0, 0.0, 0.0);
-    //     else
-    //         directions.emplace_back(std::cos(angle), std::sin(angle), 0.0); // Convert angle to direction vector
-    // }
+        cloud->push_back(pcl::PointXYZ(x, y, z)); // Add point to the point cloud
+        if (angle == M_PI)
+            directions.emplace_back(1.0, 0.0, 0.0);
+        else
+            directions.emplace_back(std::cos(angle), std::sin(angle), 0.0); // Convert angle to direction vector
+    }
 
 #if EXPORT_POINTCLOUD
     // Save the point cloud to a PCD file
@@ -124,27 +125,26 @@ std::pair<pcl::PointCloud<pcl::PointXYZ>::Ptr, std::vector<Eigen::Vector3f>> cre
     return std::make_pair(cloud, directions);
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    // Define parameters
-    // int num_points = 1000;     // Number of points in each line
-    // float noise_mean = 0.0;   // Mean of the noise
-    // float noise_stddev = 0.2; // Standard deviation of the noise
-    // std::string file_name{"/home/usamex/3dsl/line_fusion/pointclouds/noisy_lines.ply"};
-    //  = create_random_pointcloud(num_points, noise_mean, noise_stddev, file_name);
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <input_pointcloud_file> <output_pointcloud_file>" << std::endl;
+        return 1;
+    }
+
+    std::string input_file_name = argv[1];
+    std::string output_file_name = argv[2];
+
     std::pair<pcl::PointCloud<pcl::PointXYZ>::Ptr, std::vector<Eigen::Vector3f>> hair_pointcloud;
-    std::string file_name{"/home/usamex/3dsl/line_fusion/pointclouds/line_cloud.dat"};
-    read_point_cloud_binary_with_directions(file_name, hair_pointcloud);
+    read_point_cloud_binary_with_directions(input_file_name, hair_pointcloud);
+
     LineFusion line_fusion(hair_pointcloud);
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     std::pair<pcl::PointCloud<pcl::PointXYZ>::Ptr, std::vector<Eigen::Vector3f>> fused_line_cloud;
     fused_line_cloud.first = cloud;
     line_fusion.line_fusion(fused_line_cloud);
-    std::string file_name_fused{"/home/usamex/3dsl/line_fusion/pointclouds/fused_lines.ply"};
 
-    pcl::io::savePLYFileASCII(file_name_fused, *(fused_line_cloud.first));
-    visualize_pointclouds_with_orientations(hair_pointcloud);
-    visualize_pointclouds_with_orientations(fused_line_cloud);
+    pcl::io::savePLYFileASCII(output_file_name, *(fused_line_cloud.first));
 
     return 0;
 }

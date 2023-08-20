@@ -12,6 +12,25 @@ This implementation was based on the repositories:
 The code in the folders `/gipuma` and `/fuisible` was modified to perform Line-based PatchMach Multi-view Stereo as proposed by the Strand-accurate multi-view hair capture paper.
 
 ## Generate Orientation Fields and Confidence Values
+### Setup
+- Ensure you have OpenCV installed on your system.
+- Clone this repository to your local machine.
+- Navigate to the Hair_Orient2D directory.
+- Create a build directory and compile the program using CMake:
+
+```sh
+mkdir build
+cd build
+cmake ..
+make
+```
+### Usage
+Run the program by providing the path to the input image folder:
+
+```sh
+./Orient2D <input_image_folder>
+```
+Replace `<input_image_folder>` with the path to the folder containing the images you want to process.
 ## Running Line-based PatchMatch MVS
 
 ### Setup
@@ -81,4 +100,34 @@ Finally, run the following command:
 The final result will be stored in `gipuma/results/{output_dir_basename}/consistencyCheck-.../line_cloud.dat`
 
 ## Running Line Fusion
+
+-   `CMakeLists.txt`: The CMake build configuration file for compiling the program.
+-   `lib/LineFusion.hpp`: Header file containing the `LineFusion` class for performing line fusion on the noisy point cloud.
+-   `pointclouds/`: Directory containing example point cloud files.
+-   `src/LineFusion.cpp`: Source code file implementing the `LineFusion` class.
+-   `src/main.cpp`: Main source code file implementing the program's main functionality.
+
+### Usage
+
+1.  Ensure that you have the Point Cloud Library (PCL) and Eigen3 libraries installed on your system.
+    
+2.  Clone this repository to your local machine.
+    
+3.  Navigate to the repository's root directory.
+    
+4.  Create a build directory and compile the program using CMake:
+    ```bash: 
+    mkdir build
+    cd build
+    cmake ..
+    make 
+    ```
+    
+5.  Run the program by providing the input and output filenames as command-line arguments:
+    ```sh 
+    ./line_fusion <lpmvs_result> <output_pointcloud_file>
+    ``` 
+    
+    Replace `<lpmvs_result>` with the path to the binary file containing the LPMVS data, and `<output_pointcloud_file>` with the desired path for the fused point cloud output.
+
 ## Running Short Hair Generation

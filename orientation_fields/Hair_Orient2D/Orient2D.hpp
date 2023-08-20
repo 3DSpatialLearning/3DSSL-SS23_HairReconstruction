@@ -3,28 +3,26 @@
 //  HairSketch
 //
 
-// TODO: Clear up the code
 #pragma once
 #ifndef __ORIENT2D_HPP__
 #define __ORIENT2D_HPP__
 
-// #include "omp.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <vector>
 #include <string>
 #include <fftw3.h>
-#include "Im.hpp"
-#include "OrientMap.hpp"
 #include <fstream>
 #include <limits>
-
+#include <opencv2/opencv.hpp>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
 using namespace std;
+
+#define EXPORT_DEBUG_IMAGES 0
 
 class COrient2D
 {
@@ -37,7 +35,6 @@ public:
         double sigma_h = 0.5;
         double sigma_l = 1;
         double sigma_y = 4;
-        int npass = 1;
 
         // Read the input image into colorImg
         cv::Mat colorImg = cv::imread(filename, cv::IMREAD_COLOR);
@@ -58,50 +55,26 @@ public:
 
         int npix = filterImg.cols * filterImg.rows;
         cv::Mat interFilter, interOrient, interConf, interVar;
+
         // Perform npass iterations of filtering and manipulation
         std::string folder_name{outfilename};
         mkdir(folder_name.data(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-        for (int i = 0; i < npass; i++)
-        {
-            // Apply the filter to the normalized buffer and store the result in the alternate buffer
-            filter(filterImg, ndegree, sigma_h, sigma_l, sigma_y, m_hairOrient, m_hairConf, m_hairVariance, outfilename);
-            // Calculate the maximum magnitude from the filtered buffer
-            // double max_mag = 0.0;
-            // for (int j = 0; j < npix; j++)
-            // {
-            //     double mag = mask.at<double>(j) != 0.0 ? max<double>(m_hairConf.at<double>(j), 0.0) : 0.0;
-            //     filterImg.at<double>(j) = mag;
-            //     m_hairConf.at<double>(j) = mag;
-            //     max_mag = max<double>(max_mag, mag);
-            // }
-
-            // Normalize the values in the buffer by dividing by the maximum magnitude
-            // filterImg /= max_mag;
-            // cv::GaussianBlur(m_hairVariance, interVar, cv::Size(21, 21), 0.);
-            // cv::GaussianBlur(m_hairConf, interConf, cv::Size(21, 21), 0.);
-
-            cv::normalize(filterImg, interFilter, 0, 255, cv::NORM_MINMAX, CV_8U);
-            cv::imwrite(outfilename + "/interFilter" + std::to_string(i) + ".png", interFilter); // mask((outfilename + "/mask.png")); // Write the mask image to file
-            cv::normalize(m_hairConf, interConf, 0, 255, cv::NORM_MINMAX, CV_8U);
-            cv::imwrite(outfilename + "/interConf" + std::to_string(i) + ".png", interConf);
-            cv::normalize(m_hairOrient, interOrient, 0, 255, cv::NORM_MINMAX, CV_8U);
-            cv::imwrite(outfilename + "/interOrient" + std::to_string(i) + ".png", interOrient);
-            cv::normalize(m_hairVariance, interVar, 0, 255, cv::NORM_MINMAX, CV_8U);
-            cv::imwrite(outfilename + "/interVar" + std::to_string(i) + ".png", interVar);
-        }
+        filter(filterImg, ndegree, sigma_h, sigma_l, sigma_y, m_hairOrient, m_hairConf, m_hairVariance, outfilename);
 
         exportFloatImage(m_hairConf, outfilename + "_undiffusedConf.flo");
         exportFloatImage(m_hairOrient, outfilename + "_finalOrient.flo");
 
-        // // Visualize the orientations in the buffer using a color scheme
+        // Visualize the orientations in the buffer using a color scheme
         std::cout << "converting color" << std::endl;
         cv::Mat colorizedOrientImg = cv::Mat::zeros(colorImg.size(), CV_64FC3);
         cv::Mat normalizedColorizedOrientImg;
         std::cout << "converting color finished" << std::endl;
 
+#if EXPORT_DEBUG_IMAGES
         viz_ori_2color(colorizedOrientImg, m_hairOrient, m_hairConf, mask);
         cv::normalize(colorizedOrientImg, normalizedColorizedOrientImg, 0, 255, cv::NORM_MINMAX, CV_8U);
         cv::imwrite(outfilename + "_orientColorized.png", normalizedColorizedOrientImg);
+#endif
 
         // Diffuse confidence results
         cv::Mat filterHairConf, filterHairVar;
@@ -117,7 +90,6 @@ public:
         cv::GaussianBlur(m_hairVariance, filterHairVar, cv::Size(21, 21), 0.);
         cv::normalize(filterHairVar, filterHairVar, 0, 1, cv::NORM_MINMAX, CV_64F);
 
-        int i = 0, j = 0;
         for (int hI = 0; hI < m_hairConf.rows; hI++)
         {
             for (int wI = 0; wI < m_hairConf.cols; wI++)
@@ -130,16 +102,17 @@ public:
             }
         }
 
+#if EXPORT_DEBUG_IMAGES
         write_pixel_response(m_hairVariance, outfilename, "variance_norm");
         write_pixel_response(m_hairConf, outfilename, "confidence_norm");
 
         viz_ori_2color(colorizedOrientImg, m_hairOrient, filterHairConf, mask);
         cv::normalize(colorizedOrientImg, normalizedColorizedOrientImg, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::imwrite(outfilename + "_orientColorizedNew.png", normalizedColorizedOrientImg);
+        cv::imwrite(outfilename + "_orientColorizedDiffused.png", normalizedColorizedOrientImg);
 
         viz_ori_2color(colorizedOrientImg, m_hairOrient, filterHairVar, mask);
         cv::normalize(colorizedOrientImg, normalizedColorizedOrientImg, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::imwrite(outfilename + "_orientVarianceColorizedNew.png", normalizedColorizedOrientImg);
+        cv::imwrite(outfilename + "_orientVarianceColorizedDiffused.png", normalizedColorizedOrientImg);
 
         cv::normalize(m_hairConf, m_hairConf, 0, 255, cv::NORM_MINMAX, CV_8U);
         cv::imwrite(outfilename + "_undiffusedConf.png", m_hairConf);
@@ -152,14 +125,17 @@ public:
 
         cv::normalize(normalizedHairVar, normalizedHairVar, 0, 255, cv::NORM_MINMAX, CV_8U);
         cv::imwrite(outfilename + "_normalizedVar.png", normalizedHairVar);
-
-        exportFloatImage(filterHairConf, outfilename + "_finalConfidence.flo");
+#endif
+        exportFloatImage(filterHairConf, outfilename + "_diffusedConfidence.flo");
+#if EXPORT_DEBUG_IMAGES
         cv::normalize(filterHairConf, filterHairConf, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::imwrite(outfilename + "_finalizedConf.png", filterHairConf);
-
-        exportFloatImage(filterHairVar, outfilename + "_finalVariance.flo");
+        cv::imwrite(outfilename + "_diffusedConfidence.png", filterHairConf);
+#endif
+        exportFloatImage(filterHairVar, outfilename + "_diffusedVariance.flo");
+#if EXPORT_DEBUG_IMAGES
         cv::normalize(filterHairVar, filterHairVar, 0, 255, cv::NORM_MINMAX, CV_8U);
-        cv::imwrite(outfilename + "_finalizedVar.png", filterHairVar);
+        cv::imwrite(outfilename + "_diffusedVariance.png", filterHairVar);
+#endif
     }
 
     ~COrient2D() {}
@@ -241,9 +217,9 @@ public:
         double c = cos(theta);
 
         // Calculate multipliers for the Gaussian and Laplacian components
-        double xhmult = -2.0 * sqr(M_PI * sigma_xh);
-        double xlmult = -2.0 * sqr(M_PI * sigma_xl);
-        double ymult = -2.0 * sqr(M_PI * sigma_y);
+        double xhmult = -2.0 * pow(M_PI * sigma_xh, 2);
+        double xlmult = -2.0 * pow(M_PI * sigma_xl, 2);
+        double ymult = -2.0 * pow(M_PI * sigma_y, 2);
 
 // Apply the Mexican Hat wavelet to each frequency component
 #pragma omp parallel for
@@ -259,8 +235,8 @@ public:
                 double xnorm = static_cast<double>(x) / w; // [-1, 1]
 
                 // Calculate the squared and rotated coordinates
-                double xrot2 = sqr(s * xnorm - c * ynorm);
-                double yrot2 = sqr(c * xnorm + s * ynorm);
+                double xrot2 = pow(s * xnorm - c * ynorm, 2);
+                double yrot2 = pow(c * xnorm + s * ynorm, 2);
 
                 // Compute the index for the current frequency component
                 int i = x + y * (w / 2 + 1);
@@ -272,57 +248,6 @@ public:
                 // Apply the Mexican Hat wavelet filter to the frequency component
                 out[i][0] = in[i][0] * g; // Real component
                 out[i][1] = in[i][1] * g; // Imaginary component
-            }
-        }
-    }
-
-    void gabor(
-        const fftw_complex *in, int w, int h, double sigma_xh,
-        double sigma_xl, double sigma_y, double theta, fftw_complex *out)
-    {
-        // Calculate sine and cosine of theta for coordinate rotation
-        double s = std::sin(theta);
-        double c = std::cos(theta);
-
-        // Calculate multipliers for the Gaussian and Laplacian components
-        double xhmult = -2.0 * sqr(M_PI * sigma_xh);
-        double xlmult = -2.0 * sqr(M_PI * sigma_xl);
-        double ymult = -2.0 * sqr(M_PI * sigma_y);
-        double psi = 0;
-        double gamma = 1;
-        double sigma = 2;
-        double lambda = 2;
-// Apply the Mexican Hat wavelet to each frequency component
-#pragma omp parallel for
-        for (int y = 0; y < h; y++)
-        {
-            // Normalize the y-coordinate
-            double ynorm = (y >= h / 2) ? y - h : y; // [-1, 1]
-            ynorm /= h;
-
-            for (int x = 0; x <= w / 2; x++)
-            {
-                // Normalize the x-coordinate
-                double xnorm = static_cast<double>(x) / w; // [0, 1]
-
-                // Calculate the squared and rotated coordinates
-                double x_theta = xnorm * c + ynorm * s;
-                double y_theta = -xnorm * s + ynorm * c;
-                double xrot2 = x_theta * x_theta;
-                double yrot2 = y_theta * y_theta;
-
-                // Compute the index for the current frequency component
-                int i = x + y * (w / 2 + 1);
-
-                // Calculate the Gabor filter value at the current frequency component
-                double real_part = std::exp(-(xrot2 + gamma * gamma * yrot2) / (2.0 * sigma * sigma)) *
-                                   std::cos(2.0 * M_PI * x_theta / lambda + psi);
-                double imag_part = std::exp(-(xrot2 + gamma * gamma * yrot2) / (2.0 * sigma * sigma)) *
-                                   std::sin(2.0 * M_PI * x_theta / lambda + psi);
-
-                // Apply the Mexican Hat wavelet filter to the frequency component
-                out[i][0] = in[i][0] * real_part; // Real component
-                out[i][1] = in[i][1] * imag_part; // Imaginary component
             }
         }
     }
@@ -409,7 +334,6 @@ public:
 
             // Apply the Mexican Hat wavelet filter to the input image
             mexican_hat(imfft, w, h, sigma_h, sigma_l, sigma_y, angle, filtfft);
-            // gabor(imfft, w, h, sigma_h, sigma_l, sigma_y, angle, filtfft);
 
             // Perform inverse FFT
             fftw_execute(idft);
@@ -420,17 +344,6 @@ public:
                 resp_array.at(i_orient).at<double>(i) = res;
             }
 
-            // Update maximum response in the output image without confidence computation
-            // for (int j = 0; j < npix; j++)
-            // {
-            //     double res = filtered[j];
-
-            //     if (std::abs(hair_conf.at<double>(j)) < std::abs(res))
-            //     {
-            //         hair_orient.at<double>(j) = angle;
-            //         hair_conf.at<double>(j) = res;
-            //     }
-            // }
         }
         std::vector<double> responses;
         for (int i = 0; i < npix; i++)
@@ -457,8 +370,8 @@ public:
             {
                 double orient = M_PI * i_orient / orientations;
                 double orient_diff = MIN(abs(orient - best_orient), MIN(abs(orient - best_orient - M_PI), abs(orient - best_orient + M_PI)));
-                double resp_diff = max_resp - resp_array.at(i_orient).at<double>(i); // TODO: calculate mean response.
-                variance += orient_diff * pow(resp_diff, 2);                         // resp_diff over 2
+                double resp_diff = max_resp - resp_array.at(i_orient).at<double>(i); 
+                variance += orient_diff * pow(resp_diff, 2); 
             }
             // Standard variance
             variance = sqrt(variance);
@@ -640,8 +553,6 @@ public:
         }
     }
 
-private:
-    OrientMap m_orientMap;
 };
 
 #endif
