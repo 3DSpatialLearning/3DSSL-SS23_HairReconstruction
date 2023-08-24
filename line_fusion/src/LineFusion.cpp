@@ -17,15 +17,17 @@ using namespace std;
 #define DISTANCE_FUSION 2e-6
 #define KD_TREE_RADIUS 0.002
 #define CURVE_ANGLE (2 * (M_1_PI * M_1_PI) / 36.)
-#define STRAND_THICKNESS (2 * 1e-8)
+#define STRAND_THICKNESS (2 * 1e-4)
 
 void LineFusion::line_fusion(OrientedPointCloud &fused_line_cloud)
 {
+    fused_line_cloud.first->reserve(m_original_points.first->size()); // Reserve areas for point vector
     fused_line_cloud.second.reserve(m_original_points.second.size()); // Reserve areas for direction vector
+
     EigenLine q_prev, q_next;
     float d;
     assertm(m_original_points.second.size() == m_original_points.first->size(), "Point and direction vector sizes should be equal.");
-    
+
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
 
     kdtree.setInputCloud(m_original_points.first);
@@ -40,16 +42,19 @@ void LineFusion::line_fusion(OrientedPointCloud &fused_line_cloud)
         while (d > DISTANCE_FUSION && threshold < 1000)
         {
             q_next = local_meanshift(q_prev, i, kdtree);
+            // TODO: Maybe we can add this idk.
+            // if(!std::isfinite(q_next.first(0)) || !std::isfinite(q_next.first(1)) || !std::isfinite(q_next.first(2)))
+            // {
+            //     q_next = q_prev;
+            //     break;
+            // }
             d = (q_next.first - q_prev.first).norm();
             q_prev = q_next;
             threshold++;
         }
-// #pragma omp critical
-    {
-            fused_line_cloud.first->emplace_back(q_next.first[0], q_next.first[1], q_next.first[2]);
-            fused_line_cloud.second.push_back(q_next.second);
-            std::cout << i << std::endl;
-    }
+        fused_line_cloud.first->emplace_back(q_next.first(0), q_next.first(1), q_next.first(2));
+        fused_line_cloud.second.push_back(q_next.second);
+        std::cout << i << std::endl;
     }
 }
 
@@ -63,7 +68,8 @@ std::optional<LineFusion::EigenVector> LineFusion::line_plane_intersection(const
         return {};
     }
     float numerator = (point_on_plane - line.first).dot(plane_normal.stableNormalized());
-    float denominator = line.second.stableNormalized().dot(plane_normal.stableNormalized());
+    float denominator = round(line.second.stableNormalized().dot(plane_normal.stableNormalized()) * 1000.0) / 1000.0;
+    denominator = std::clamp<float>(denominator, -1., 1.);
     float d = numerator / denominator;
 
     return line.first + d * line.second.stableNormalized();
@@ -81,12 +87,12 @@ LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q
         LineFusion::EigenVector init_position{m_original_points.first->at(index).getArray3fMap()};
         LineFusion::EigenVector init_direction{m_original_points.second[index]};
         LineFusion::EigenVector position, direction;
-        LineFusion::EigenVector positions_all, directions_all;
+        LineFusion::EigenVector positions_all{0, 0, 0}, directions_all{0, 0, 0};
         LineFusion::EigenLine line;
         float weight = 0;
         std::optional<LineFusion::EigenVector> new_position;
         float total_weights = 0;
-#pragma omp parallel for
+        // #pragma omp parallel for
         for (auto &&neighbor : point_idx_radius_search)
         {
             position = m_original_points.first->at(neighbor).getArray3fMap();
@@ -99,7 +105,8 @@ LineFusion::EigenLine LineFusion::local_meanshift(const LineFusion::EigenLine &q
                 float squared_diff = (new_position.value() - init_position).squaredNorm();
                 float first_part = squared_diff / STRAND_THICKNESS;
 
-                float dir_diff = init_direction.stableNormalized().dot(direction.stableNormalized());
+                float dir_diff = round(init_direction.stableNormalized().dot(direction.stableNormalized()) * 1000.0) / 1000.0;
+                dir_diff = std::clamp<float>(dir_diff, -1., 1.);
                 float second_part = pow(acos(dir_diff), 2) / CURVE_ANGLE;
                 weight = exp(-(first_part + second_part));
                 positions_all += weight * new_position.value();
