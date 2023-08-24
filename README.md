@@ -31,6 +31,10 @@ Run the program by providing the path to the input image folder:
 ```
 Replace `<input_image_folder>` with the path to the folder containing the images you want to process.
 ## Running Line-based PatchMatch MVS
+### Some important files:
+-   `gipuma/gipuma.cu`: File containing cuda code for running LPMVS - Estimates 3D line map for one view
+-   `fuisible/fuisible.cu`: File containing cuda code for merging all 3D line per-view maps into one. 
+-   `gipuma/scripts/97_frame_00005.sh`: Shell script file for executing gipuma for each view and merge the results by running fuisible
 
 ### Setup
 Use cmake to compile `fusible` and `gipuma` projects:
@@ -45,8 +49,8 @@ Use cmake to compile `fusible` and `gipuma` projects:
 ### Data
 1. Create a new folder `data/my_dataset` inside the `gipuma` folder
 2. Add a subfolder `images` containing the multiview images and the camera parameters following the KRT format
-3. Add another subfolder for `masks` contining the hair segmentation masks. `masks/cam_img1.png` should correspond to `images/cam_img1.png`, ...
-4. Add another subfolder for `depth` contining the initial depth values. `depth/cam_img1.dat` should correspond to `images/cam_img1.png`, ...
+3. [Optional] Add another subfolder for `masks` contining the hair segmentation masks. `masks/cam_img1.png` should correspond to `images/cam_img1.png`, ...
+4. [Optional] Add another subfolder for `depth` contining the initial depth values. `depth/cam_img1.dat` should correspond to `images/cam_img1.png`, ...
 5. Add another subfolder for `orientation_fields` contining the generated orientation fields. `orientation_fields/cam_img_1_finalOrient.flo` should correspond to `images/cam_img1.png`, ...
 6. Add another subfolder for `confidence_values` contining the generated orientation fields. `confidence_values/cam_img_1_finalVariance.flo` should correspond to `images/cam_img1.png`, ...
 7. Add a script `my_dataset.sh` in the `/scripts` folder to run the Line-based PatchMatch MVS. For an example see: `scrips/97_frame_00005.sh`
@@ -64,12 +68,12 @@ The final file structure should look like:
 |   |   |   |   ├── ...
 |   |   |   |   ├── cam_img_N.png
 |   |   |   |   ├── cam_par.txt
-|   |   |   ├── depth
+|   |   |   ├── depth                             # Optional folder
 |   |   |   |   ├── cam_img_1.png
 |   |   |   |   ├── cam_img_2.png
 |   |   |   |   ├── ...
 |   |   |   |   ├── cam_img_N.png
-|   |   |   ├── masks
+|   |   |   ├── masks                             # Optional folder
 |   |   |   |   ├── cam_img_1.png
 |   |   |   |   ├── cam_img_2.png
 |   |   |   |   ├── ...
