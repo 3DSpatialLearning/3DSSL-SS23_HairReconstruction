@@ -34,12 +34,18 @@ __managed__ int TILE_W;
 __managed__ int TILE_H;
 #endif
 
+/**
+ * Get a random value. Used for adding perturbations to the depth values
+*/
 __device__ FORCEINLINE_GIPUMA float curand_between(curandState *cs,
                                                    const float &min,
                                                    const float &max) {
     return curand_uniform(cs) * (max - min) + min;
 }
 
+/**
+ * Get a random unit vector. Used for generating random direction vectors
+*/
 __device__ FORCEINLINE_GIPUMA static void rndUnitVectorSphereMarsaglia_cu(
     float3 *v, curandState *cs) {
     float x = 1.0f;
@@ -56,6 +62,13 @@ __device__ FORCEINLINE_GIPUMA static void rndUnitVectorSphereMarsaglia_cu(
     v->z = 1.0f - 2.0f * sum;
 }
 
+/**
+ * Compute the 3D  coordinates of a point associated with pixel coordinates
+ * @param pixel 2D pixel coordinates in an image
+ * @param K_inv inverse of intrinsic matrix for the given image
+ * @param Rt extrinsic matrix for the given image
+ * @param res variable for stroing 3D coordinates
+*/
 __device__ FORCEINLINE_GIPUMA void getPixelWorldCoord_cu(const int2 pixel,
                                                          const float depth,
                                                          const float *K_inv,
@@ -93,6 +106,12 @@ __device__ FORCEINLINE_GIPUMA void getPixelWorldCoord_cu(const int2 pixel,
              Rt_inv[11] * pixelCameraHomogenCoord.w;
 }
 
+/**
+ * Compute the pixel coordinates of the projection of a 3D point
+ * @param point 3D coordinated of a point in 3D
+ * @param P projection matrix
+ * @param res variable for stroing the result
+*/
 __device__ FORCEINLINE_GIPUMA void getPointPixelCoord_cu(float3 point, float *P,
                                                          float2 *res) {
     float4 pointHomogenCoord;
@@ -124,6 +143,17 @@ __device__ FORCEINLINE_GIPUMA void normalize_cu(float2 *__restrict__ v) {
     v->y *= inverse_sqrt;
 }
 
+/**
+ * Computes the 3D coordinates of a sample point.
+ * For the sample points we don't know the actual depth values. Thus projecting them in 3D is not strightforward.
+ * To project the sample points in 3D we enfore the constraint that the sample points should lie on the 3D line
+ * @param samplePoint
+ * @param pointOnLine defines a point in 3D on the line
+ * @param lineUnitDirection defines the 3D line direction
+ * @param K_inv inverse of intrinsic matrix for the given image
+ * @param Rt extrinsic matrix for the given image
+ * @param res Stores the 3D point in res
+*/
 __device__ FORCEINLINE_GIPUMA static void projectSamplePointIn3D_cu(
     float2 samplePoint, const float3 pointOnLine,
     const float3 lineUnitDirection, const float *K_inv, const float *Rt,
@@ -167,7 +197,6 @@ __device__ FORCEINLINE_GIPUMA static void projectSamplePointIn3D_cu(
     r3.z = Rt[10];
 
     float lambda = 0;
-    // For some reason brackets are VERY important here!
     const float d =
         dot4(r2, lineUnitDirection) - (yPrim * (dot4(r3, lineUnitDirection)));
     const float n = (yPrim * (dot4(r3, pointOnLine))) + (yPrim * t3) -
@@ -189,6 +218,14 @@ __device__ FORCEINLINE_GIPUMA static void projectSamplePointIn3D_cu(
 }
 
 template <typename T>
+/**
+ * Computes the 2D sample points in the reference image and neighbouring views.
+ * @param gs pixel coordinates in the reference image
+ * @param pixelCoord pixel coordinates in the reference image
+ * @param depth of the pixel
+ * @param unitDirection unit vector associated with the direction of the 3D line
+ * @param samples array for storing the sample points
+*/
 __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
                                                    const int2 pixelCoord,
                                                    const float depth,
@@ -199,38 +236,27 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
     const int selectedViewsNumber = gs.cameras->viewSelectionSubsetNumber;
     int *selectedViewsSubset = gs.cameras->viewSelectionSubset;
 
-    // correct
     float3 pixelWorldCoord;
     getPixelWorldCoord_cu(
         pixelCoord, depth, gs.cameras->cameras[REFERENCE].K_inv,
         gs.cameras->cameras[REFERENCE].Rt_extended_inv,
         &pixelWorldCoord);
 
-    // printf("pixelWorldCoord %f %f %f \n", pixelWorldCoord.x, pixelWorldCoord.y, pixelWorldCoord.z);
-    // correct
     float3 seoncdPointOnLineWorldCoord;
 
     addout(pixelWorldCoord, unitDirection, seoncdPointOnLineWorldCoord);
-    // printf("seoncdPointOnLineWorldCoord %f %f %f \n", seoncdPointOnLineWorldCoord.x, seoncdPointOnLineWorldCoord.y, seoncdPointOnLineWorldCoord.z);
 
-    // correct
     float2 seoncdPointPixelCoord;
     getPointPixelCoord_cu(seoncdPointOnLineWorldCoord,
                           gs.cameras->cameras[REFERENCE].P,
                           &seoncdPointPixelCoord);
-    // printf("seoncdPointPixelCoord %f %f \n", seoncdPointPixelCoord.x, seoncdPointPixelCoord.y);
 
-    // correct
     float2 lineInReferenceImageUnitDirection;
     subout2(pixelCoord, seoncdPointPixelCoord,
             lineInReferenceImageUnitDirection);
-    // printf("lineInReferenceImageUnitDirection %f %f \n", lineInReferenceImageUnitDirection.x, lineInReferenceImageUnitDirection.y);
 
-    // correct
     normalize_cu(&lineInReferenceImageUnitDirection);
-    // printf("normalized lineInReferenceImageUnitDirection %f %f \n", lineInReferenceImageUnitDirection.x, lineInReferenceImageUnitDirection.y);
 
-    // correct
     int sampleIdx = 0;
 
     for (int i = -k / 2; i <= k / 2; i++) {
@@ -247,7 +273,6 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
 
     for (int j = 0; j < k; j++) {
         float2 samplePixel = samples[j];
-        // correct
         float3 sampleWorldCoord;
         projectSamplePointIn3D_cu(
             samplePixel, pixelWorldCoord, unitDirection,
@@ -257,7 +282,6 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
         for (int i = 0; i < selectedViewsNumber; i++) {
             int cameraIdx = selectedViewsSubset[i];
 
-            // correct
             float2 samplePixelInImageI;
             getPointPixelCoord_cu(sampleWorldCoord,
                                   gs.cameras->cameras[cameraIdx].P,
@@ -268,6 +292,12 @@ __device__ FORCEINLINE_GIPUMA void samplePoints_cu(const GlobalState &gs,
 }
 
 template <typename T>
+/**
+ * Compute the angular difference in radians.
+ * @param lineDirection 2D vector
+ * @param orientationAngle angle in radians
+ * @returns the angular difference in radians
+*/
 __device__ FORCEINLINE_GIPUMA static float angularDiff_cu(
     const float2 lineDirection, const float orientationAngle) {
     float lineDirectionX = lineDirection.x;
@@ -285,6 +315,14 @@ __device__ FORCEINLINE_GIPUMA static float angularDiff_cu(
 }
 
 template <typename T>
+/**
+ * Computes the number of views for which sample points are "valid".
+ * A sample point is valid if it is a valid point in the reference image and it's corresponding sample in the i-th image is valid
+ * A point in an image is considered valid if it lies within the image.
+ * @param gs 
+ * @param samples 2D sample points
+ * @returns the number of views which has at least one valid sample point
+*/
 __device__ FORCEINLINE_GIPUMA static int validNeighborsCount_cu(
     const GlobalState &gs, const float2 samples[800]) {
     const int k = gs.params->k;
@@ -313,7 +351,6 @@ __device__ FORCEINLINE_GIPUMA static int validNeighborsCount_cu(
         }
 
         if (validSamplesCount == 0) {
-            // printf("WARNING valid sample count is 0!\n");
             continue;
         }
         validNeighborsCount++;
@@ -323,6 +360,12 @@ __device__ FORCEINLINE_GIPUMA static int validNeighborsCount_cu(
 }
 
 template <typename T>
+/**
+ * Computes the gemetric cost per view. Denoted by g_i in the paper
+ * @param gs
+ * @param samples 2D sample points
+ * @param cameraIds current view index
+*/
 __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
     const GlobalState &gs, const float2 samples[800], const int cameraIdx) {
     const int k = gs.params->k;
@@ -355,7 +398,6 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
         validSamplesCount++;
         const float orientaion = texat(imgOrient, sampleInOtherView.x, sampleInOtherView.y);
         const float confidence = texat(imgConf, sampleInOtherView.x, sampleInOtherView.y);
-        // const float confidence = 1.f;
 
         confidenceValuesSum += confidence;
 
@@ -363,8 +405,7 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
     }
 
     if (confidenceValuesSum == 0) {
-        // printf("WARNING confidenceValuesSum is 0! cameraIdx %d\n", cameraIdx);
-        return 1000.f;
+        return MAXCOST;
     }
 
     geometricCost /= confidenceValuesSum;
@@ -372,6 +413,12 @@ __device__ FORCEINLINE_GIPUMA static float geometricCost_cu(
 }
 
 template <typename T>
+/**
+ * Computes the intensity cost for the reference image and a given neighbouring image
+ * @param gs
+ * @param samples 2D sample points
+ * @param cameraIds neighbouring view index
+*/
 __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
     const GlobalState &gs, const float2 samples[800], const int cameraIdx) {
     const int k = gs.params->k;
@@ -402,9 +449,7 @@ __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
     }
 
     if (validSamples == 0) {
-        // What to do here?
         intensityCost = MAXCOST;
-        // printf("WARNING! validSamples is 0\n");
         return intensityCost;
     }
 
@@ -437,8 +482,6 @@ __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
     float denominator = sqrtf(denominator1 * denominator2);
     float corelation;
     if (denominator < 0.001) {
-        // What to do here?
-        // printf("WARNING! denominator is 0\n");
         corelation = 1.f;
     }  else {
         corelation = numerator / denominator;
@@ -451,6 +494,9 @@ __device__ FORCEINLINE_GIPUMA static float intensityCost_cu(
 }
 
 template <typename T>
+/**
+ * Computes the wighted sum between the geometic and the intensity costs
+*/
 __device__ FORCEINLINE_GIPUMA static float getCombinedCost_cu(
     const float geometricCostRefImage,
     float geometricCosts[20],
@@ -495,7 +541,6 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
     const int validNeighborsCount = validNeighborsCount_cu<T>(gs, samples);
 
     if (validNeighborsCount == 0) {
-        // printf("WARNING valid neighbors count is 0!\n");
         return (selectedViewsNumber + 1) * MAXCOST;
     }
 
@@ -528,7 +573,10 @@ __device__ FORCEINLINE_GIPUMA static float pmCostMultiview_cu(
 }
 
 template <typename T>
-__global__ void gipuma_init_cu2(GlobalState &gs) {
+/**
+ * Initialize depth and direction vector parameters
+*/
+__global__ void gipuma_init_cu(GlobalState &gs) {
     const int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                              blockIdx.y * blockDim.y + threadIdx.y);
     const int rows = gs.cameras->rows;
@@ -544,14 +592,12 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
     rndUnitVectorSphereMarsaglia_cu(&generatedUnitDir, &localState);
 
     gs.lines->unitDirection[center] = generatedUnitDir;
-    // gs.lines->unitDirection[center].x = -0.12800153;
-    // gs.lines->unitDirection[center].y = -0.68858582;
-    // gs.lines->unitDirection[center].z = 0.7137683;
 
-    // use disparity instead of depth?
     float mind = gs.params->depthMin;
     float maxd = gs.params->depthMax;
 
+    // Assing random depth only if the depth is not assigned from COLAMP initial
+    // depth estimates.
     if (gs.lines->depth[center] < 0.01f){
         gs.lines->depth[center] = curand_between(&localState, mind, maxd);
     }
@@ -562,7 +608,11 @@ __global__ void gipuma_init_cu2(GlobalState &gs) {
 }
 
 template <typename T>
-__device__ FORCEINLINE_GIPUMA void lineRefinement_cu(GlobalState &gs,
+/**
+ * Generates new random depth and vector direction values.
+ * Updates pixle parameters if they reduce the cost.
+*/
+__device__ FORCEINLINE_GIPUMA void linePerturbations_cu(GlobalState &gs,
                                                          int2 referencePixel, const int it) {
     const int cols = gs.cameras->cols;
 
@@ -595,6 +645,9 @@ __device__ FORCEINLINE_GIPUMA void lineRefinement_cu(GlobalState &gs,
 }
 
 template <typename T>
+/**
+ * Compute cost for new pixel paramaters and update current params if they reduce the cost
+*/
 __device__ FORCEINLINE_GIPUMA void spatialPropagation_cu(GlobalState &gs,
                                                          int2 referencePixel,
                                                          int2 otherPixel, const int it) {
@@ -607,7 +660,6 @@ __device__ FORCEINLINE_GIPUMA void spatialPropagation_cu(GlobalState &gs,
     const int center = referencePixel.y * cols + referencePixel.x;
     const int otherCenter = otherPixel.y * cols + otherPixel.x;
 
-    // TODO: compute new depth
     float newDepth = gs.lines->depth[otherCenter];
     float3 newDir = gs.lines->unitDirection[otherCenter];
 
@@ -623,6 +675,9 @@ __device__ FORCEINLINE_GIPUMA void spatialPropagation_cu(GlobalState &gs,
     return;
 }
 template <typename T>
+/**
+ * Propagate parameters for 'black' pixels using 1-hop horizonal and vertical neighbours 
+*/
 __global__ void gipuma_black_spatialPropClose_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
@@ -659,6 +714,9 @@ __global__ void gipuma_black_spatialPropClose_cu(GlobalState &gs, const int it) 
 }
 
 template <typename T>
+/**
+ * Propagate parameters for 'black' pixels using 5-hop horizonal and vertical neighbours 
+*/
 __global__ void gipuma_black_spatialPropFar_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
@@ -695,7 +753,7 @@ __global__ void gipuma_black_spatialPropFar_cu(GlobalState &gs, const int it) {
 }
 
 template <typename T>
-__global__ void gipuma_black_lineRefine_cu(GlobalState &gs, const int it) {
+__global__ void gipuma_black_linePerturbations_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
     if ((p.x  + p.y) % 2 == 0) {
@@ -706,10 +764,13 @@ __global__ void gipuma_black_lineRefine_cu(GlobalState &gs, const int it) {
 
     if (p.x >= cols) return;
     if (p.y >= rows) return;
-    lineRefinement_cu<T>(gs, p, it);
+    linePerturbations_cu<T>(gs, p, it);
 }
 
 template <typename T>
+/**
+ * Propagate parameters for 'red' pixels using 1-hop horizonal and vertical neighbours 
+*/
 __global__ void gipuma_red_spatialPropClose_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
@@ -744,6 +805,9 @@ __global__ void gipuma_red_spatialPropClose_cu(GlobalState &gs, const int it) {
 }
 
 template <typename T>
+/**
+ * Propagate parameters for 'black' pixels using 5-hop horizonal and vertical neighbours 
+*/
 __global__ void gipuma_red_spatialPropFar_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
@@ -780,7 +844,7 @@ __global__ void gipuma_red_spatialPropFar_cu(GlobalState &gs, const int it) {
 }
 
 template <typename T>
-__global__ void gipuma_red_lineRefine_cu(GlobalState &gs, const int it) {
+__global__ void gipuma_red_linePerturbations_cu(GlobalState &gs, const int it) {
     int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                        blockIdx.y * blockDim.y + threadIdx.y);
     if ((p.x  + p.y) % 2 == 1) {
@@ -791,10 +855,10 @@ __global__ void gipuma_red_lineRefine_cu(GlobalState &gs, const int it) {
 
     if (p.x >= cols) return;
     if (p.y >= rows) return;
-    lineRefinement_cu<T>(gs, p, it);
+    linePerturbations_cu<T>(gs, p, it);
 }
 
-__global__ void gipuma_compute_disp(GlobalState &gs) {
+__global__ void gipuma_compute_directions_world_frame(GlobalState &gs) {
     const int2 p = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                              blockIdx.y * blockDim.y + threadIdx.y);
 
@@ -806,16 +870,11 @@ __global__ void gipuma_compute_disp(GlobalState &gs) {
     const int center = p.y * cols + p.x;
     float3 lineDirection = gs.lines->unitDirection[center];
     float3 direction_transformed;
+
     // Transform back direction to world coordinate
     matvecmul4(gs.cameras->cameras[REFERENCE].R_orig_inv, lineDirection,
                (&direction_transformed));
 
-    // TODO: transform depth?
-    // if (gs.lines->c[center] != MAXCOST)
-    //     norm_transformed.w =
-    //         getDisparity_cu(norm, norm.w, p, gs.cameras->cameras[REFERENCE]);
-    // else
-    //     norm_transformed.w = 0;
     gs.lines->unitDirection[center] = direction_transformed;
     return;
 }
@@ -828,12 +887,15 @@ float getAverageCost(GlobalState &gs) {
         }
     }
 
-    // printf("total cost 1000 * %f \n", c);
     float c2 = c / (gs.cameras->rows * gs.cameras->cols);
     return 1000.f * c2;
 }
 
 template <typename T>
+/**
+ * Run 8 iterations of the red-black spatial propagation
+ * optimization scheme using Line-based PatchMatch MVS cost 
+*/
 void gipuma(GlobalState &gs) {
     cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
 
@@ -861,7 +923,7 @@ void gipuma(GlobalState &gs) {
     printf("Blocksize is %dx%d\n", gs.params->box_hsize, gs.params->box_vsize);
 
     printf("Number of iterations is %d\n", maxiter);
-    gipuma_init_cu2<T><<<grid_size_initrand, block_size_initrand>>>(gs);
+    gipuma_init_cu<T><<<grid_size_initrand, block_size_initrand>>>(gs);
 
     cudaDeviceSynchronize();
 
@@ -884,7 +946,7 @@ void gipuma(GlobalState &gs) {
         printf("cost black far: %.8f \n", getAverageCost(gs));
 
         // line refinement
-        gipuma_black_lineRefine_cu<T>
+        gipuma_black_linePerturbations_cu<T>
             <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost black refine: %.8f \n", getAverageCost(gs));
@@ -901,15 +963,15 @@ void gipuma(GlobalState &gs) {
         cudaDeviceSynchronize();
         printf("cost red far: %.8f \n", getAverageCost(gs));
 
-        // line refinement
-        gipuma_red_lineRefine_cu<T>
+        // Add perturbations to depth and direction vectors
+        gipuma_red_linePerturbations_cu<T>
             <<<grid_size_initrand, block_size_initrand>>>(gs, it);
         cudaDeviceSynchronize();
         printf("cost red refine: %.8f \n", getAverageCost(gs));
     }
 
-    // Transform directions to world space
-    gipuma_compute_disp<<<grid_size_initrand, block_size_initrand>>>(gs);
+    // Transform direction vectors to world space
+    gipuma_compute_directions_world_frame<<<grid_size_initrand, block_size_initrand>>>(gs);
     cudaDeviceSynchronize();
     cudaEventRecord(stop);
 
@@ -923,7 +985,6 @@ void gipuma(GlobalState &gs) {
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) printf("Error: %s\n", cudaGetErrorString(err));
 
-    // print results to file
     cudaFree(&gs.cs);
 }
 
