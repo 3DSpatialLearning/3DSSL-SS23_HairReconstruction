@@ -14,7 +14,6 @@ The code in the folders `/gipuma` and `/fuisible` was modified to perform Line-b
 ## Generate Orientation Fields and Confidence Values
 ### Setup
 - Ensure you have OpenCV installed on your system.
-- Clone this repository to your local machine.
 - Navigate to the Hair_Orient2D directory.
 - Create a build directory and compile the program using CMake:
 
@@ -110,12 +109,10 @@ The final result will be stored in `gipuma/results/{output_dir_basename}/consist
 ### Usage
 
 1.  Ensure that you have the Point Cloud Library (PCL) and Eigen3 libraries installed on your system.
+        
+2.  Navigate to the repository's root directory.
     
-2.  Clone this repository to your local machine.
-    
-3.  Navigate to the repository's root directory.
-    
-4.  Create a build directory and compile the program using CMake:
+3.  Create a build directory and compile the program using CMake:
     ```bash: 
     mkdir build
     cd build
@@ -123,7 +120,7 @@ The final result will be stored in `gipuma/results/{output_dir_basename}/consist
     make 
     ```
     
-5.  Run the program by providing the input and output filenames as command-line arguments:
+4.  Run the program by providing the input and output filenames as command-line arguments:
     ```sh 
     ./line_fusion <lpmvs_result> <output_pointcloud_file>
     ``` 
@@ -138,8 +135,6 @@ The final result will be stored in `gipuma/results/{output_dir_basename}/consist
 ### Usage
 
 1.  Ensure that you have the Point Cloud Library (PCL), Eigen3 and OpenCV installed on your system.
-    
-2.  Clone this repository to your local machine.
-    
-3.  Run the program in Visual Studio 2022
+   
+2.  Run the program in Visual Studio 2022
     
