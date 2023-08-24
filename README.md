@@ -131,3 +131,15 @@ The final result will be stored in `gipuma/results/{output_dir_basename}/consist
     Replace `<lpmvs_result>` with the path to the binary file containing the LPMVS data, and `<output_pointcloud_file>` with the desired path for the fused point cloud output.
 
 ## Running Short Hair Generation
+
+-   `Hair_Generation.cpp`: Source code for the hair strands generation.
+-   `all_output_strand.ply`: The generation result.
+
+### Usage
+
+1.  Ensure that you have the Point Cloud Library (PCL) and Eigen3 libraries and OpenCV installed on your system.
+    
+2.  Clone this repository to your local machine.
+    
+3.  Run the program in Visual Studio 2022
+    
