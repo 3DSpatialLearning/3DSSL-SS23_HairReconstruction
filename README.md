@@ -137,7 +137,7 @@ The final result will be stored in `gipuma/results/{output_dir_basename}/consist
 
 ### Usage
 
-1.  Ensure that you have the Point Cloud Library (PCL) and Eigen3 libraries and OpenCV installed on your system.
+1.  Ensure that you have the Point Cloud Library (PCL), Eigen3 and OpenCV installed on your system.
     
 2.  Clone this repository to your local machine.
     
